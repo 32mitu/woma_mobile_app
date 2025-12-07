@@ -1,33 +1,33 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 
 export const useExerciseTypes = (userProfile: any) => {
   const [availableTypes, setAvailableTypes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // デフォルトの運動種目（マスタデータとしてコードで持つか、Firestoreの共通マスタから引くのが一般的ですが、今回はコード定義）
+  // Web版とIDや構造を合わせたデフォルトデータ
   const defaultTypes = [
-    { id: 'run', name: 'ランニング', metsValues: { 低: 6.0, 中: 8.3, 高: 10.5 }, isCustom: false },
-    { id: 'walk', name: 'ウォーキング', metsValues: { 低: 3.0, 中: 4.0, 高: 5.0 }, isCustom: false },
-    { id: 'muscle', name: '筋トレ', metsValues: { 低: 3.5, 中: 5.0, 高: 6.0 }, isCustom: false },
-    { id: 'yoga', name: 'ヨガ/ストレッチ', metsValues: { 低: 2.5, 中: 3.0, 高: 4.0 }, isCustom: false },
-    { id: 'cycle', name: 'サイクリング', metsValues: { 低: 4.0, 中: 8.0, 高: 10.0 }, isCustom: false },
-    { id: 'swim', name: '水泳', metsValues: { 低: 6.0, 中: 8.0, 高: 10.0 }, isCustom: false },
+    { id: 'default_running', name: 'ランニング', metsValues: { '低': 6, '中': 8, '高': 10 }, isCustom: false },
+    { id: 'default_walking', name: 'ウォーキング', metsValues: { '低': 3, '中': 4, '高': 5 }, isCustom: false },
+    { id: 'default_training', name: '筋トレ', metsValues: { '低': 3, '中': 5, '高': 8 }, isCustom: false },
+    // 必要に応じてWeb版のデフォルトと揃えてください
   ];
 
   useEffect(() => {
-    if (!userProfile) {
+    if (!userProfile?.uid) {
       setAvailableTypes(defaultTypes);
       setLoading(false);
       return;
     }
 
-    // ユーザー作成のカスタム種目を監視
+    // ★修正ポイント1: コレクション名を 'userExerciseTypes' に変更
+    // ★修正ポイント2: 検索条件を 'userId' に変更
+    // ※ Web版に合わせて orderBy は一旦外しています（インデックスエラー回避のため）。
+    //   並び替えが必要な場合はクライアント側（JavaScript）で行うのが安全です。
     const q = query(
-      collection(db, 'exerciseTypes'),
-      where('createdBy', '==', userProfile.uid),
-      orderBy('createdAt', 'desc')
+      collection(db, 'userExerciseTypes'),
+      where('userId', '==', userProfile.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -36,7 +36,15 @@ export const useExerciseTypes = (userProfile: any) => {
         ...doc.data(),
         isCustom: true
       }));
+      // 新しい順などに並び替えたい場合はここで sort する
+      // .sort((a, b) => b.createdAt - a.createdAt);
+      
       setAvailableTypes([...defaultTypes, ...customTypes]);
+      setLoading(false);
+    }, (error) => {
+      console.error("運動種目の取得エラー:", error);
+      // エラー時もデフォルトだけは表示しておく
+      setAvailableTypes(defaultTypes);
       setLoading(false);
     });
 
@@ -45,22 +53,27 @@ export const useExerciseTypes = (userProfile: any) => {
 
   // 新規作成
   const createNewExerciseType = async (data: { name: string, low: number, mid: number, high: number }) => {
-    if (!userProfile) return;
-    await addDoc(collection(db, 'exerciseTypes'), {
+    if (!userProfile?.uid) return;
+    
+    // ★修正ポイント3: 書き込み先も 'userExerciseTypes' に変更
+    // ★修正ポイント4: フィールド名を 'userId' に変更
+    // ★修正ポイント5: キー名を Web版に合わせて日本語 ('低', '中', '高') に統一
+    await addDoc(collection(db, 'userExerciseTypes'), {
       name: data.name,
       metsValues: {
-        低: Number(data.low),
-        中: Number(data.mid),
-        高: Number(data.high)
+        '低': Number(data.low),
+        '中': Number(data.mid),
+        '高': Number(data.high)
       },
-      createdBy: userProfile.uid,
+      userId: userProfile.uid, 
       createdAt: serverTimestamp()
     });
   };
 
   // 削除
   const deleteExerciseType = async (typeId: string) => {
-    await deleteDoc(doc(db, 'exerciseTypes', typeId));
+    // ★修正ポイント6: 削除先も合わせる
+    await deleteDoc(doc(db, 'userExerciseTypes', typeId));
   };
 
   return { availableTypes, loading, createNewExerciseType, deleteExerciseType };

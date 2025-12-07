@@ -2,35 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
 import { useSocial } from '../hooks/useSocial';
+// ★追加: ルーター
+import { useRouter } from 'expo-router';
 
 type Props = {
   user: any;
 };
 
-// ★修正: export default function に変更
 export default function UserCard({ user }: Props) {
+  const router = useRouter(); // ★追加
   const { userProfile } = useAuth();
   const { followUser, unfollowUser, loading } = useSocial();
 
-  // フォロー状態の初期値チェック
   const isInitiallyFollowing = (userProfile as any)?.following?.includes(user.uid) || false;
-  
-  // ★追加: ボタンを押した瞬間に色を変えるためのローカルステート
   const [isFollowing, setIsFollowing] = useState(isInitiallyFollowing);
-
   const isMe = userProfile?.uid === user.uid;
 
-  // プロフィールが再読込されたらステートも同期
   useEffect(() => {
     setIsFollowing(isInitiallyFollowing);
   }, [isInitiallyFollowing]);
 
-  const handlePress = async () => {
-    // 1. まず見た目だけすぐに変える (UI体験の向上)
+  const handleFollowPress = async () => {
     const nextState = !isFollowing;
     setIsFollowing(nextState);
-
-    // 2. 裏側でAPIを叩く
     if (nextState) {
       await followUser(user.uid);
     } else {
@@ -38,19 +32,23 @@ export default function UserCard({ user }: Props) {
     }
   };
 
+  // ★追加: プロフィール画面への遷移
+  const handleCardPress = () => {
+    router.push(`/public/${user.uid}`);
+  };
+
   return (
-    <View style={styles.card}>
+    // ★修正: カード全体をTouchableOpacityにする
+    <TouchableOpacity style={styles.card} onPress={handleCardPress}>
       <Image 
         source={{ uri: user.profileImageUrl || user.photoURL || 'https://via.placeholder.com/50' }} 
         style={styles.avatar} 
       />
       
       <View style={styles.info}>
-        {/* ログで確認した username フィールドを優先表示 */}
         <Text style={styles.name}>
           {user.username || user.displayName || user.name || '名無しさん'}
         </Text>
-        
         <Text style={styles.bio} numberOfLines={1}>
           {user.bio || '自己紹介はまだありません'}
         </Text>
@@ -59,7 +57,7 @@ export default function UserCard({ user }: Props) {
       {!isMe && (
         <TouchableOpacity
           style={[styles.button, isFollowing ? styles.followingButton : styles.followButton]}
-          onPress={handlePress}
+          onPress={handleFollowPress}
           disabled={loading}
         >
           <Text style={[styles.buttonText, isFollowing ? styles.followingText : styles.followText]}>
@@ -67,7 +65,7 @@ export default function UserCard({ user }: Props) {
           </Text>
         </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
 

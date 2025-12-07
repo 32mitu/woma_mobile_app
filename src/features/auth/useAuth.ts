@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from '../../../firebaseConfig'; // ルートにある設定ファイルを読み込み
+import { doc, onSnapshot } from "firebase/firestore"; // getDoc から onSnapshot に変更
+import { auth, db } from '../../../firebaseConfig';
 
 // ユーザー情報の型定義
 type UserProfile = {
@@ -19,46 +19,57 @@ export const useAuth = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 1. 認証状態の監視
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-
-      if (firebaseUser) {
-        try {
-          // Firestoreからユーザーの詳細情報（名前や体重など）を取得
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          const docSnap = await getDoc(userDocRef);
-
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setUserProfile({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              username: data.username || "名無しさん",
-              weight: data.weight || null,
-              height: data.height || null,
-              profileImageUrl: data.profileImageUrl || null,
-              bio: data.bio || "",
-            });
-          } else {
-            // データがない場合の初期値
-            setUserProfile({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              username: "ゲスト",
-            });
-          }
-        } catch (error) {
-          console.error("ユーザー情報の取得に失敗:", error);
-        }
-      } else {
+      // ログアウト時はここでロード完了＆データクリア
+      if (!firebaseUser) {
         setUserProfile(null);
+        setLoading(false);
       }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. ユーザープロフィールのリアルタイム監視 (userステートに依存)
+  useEffect(() => {
+    if (!user) return;
+
+    setLoading(true);
+    const userDocRef = doc(db, "users", user.uid);
+
+    // onSnapshot を使用して、データの変更をリアルタイムに検知する
+    const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setUserProfile({
+          uid: user.uid,
+          email: user.email,
+          username: data.username || "名無しさん",
+          weight: data.weight || null,
+          height: data.height || null,
+          profileImageUrl: data.profileImageUrl || null,
+          bio: data.bio || "",
+        });
+      } else {
+        // データがない場合の初期値
+        setUserProfile({
+          uid: user.uid,
+          email: user.email,
+          username: "ゲスト",
+        });
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("ユーザー情報の取得に失敗:", error);
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    // アンマウント時、またはユーザー切り替え時に監視を解除
+    return () => unsubscribeSnapshot();
+  }, [user]);
 
   return { user, userProfile, loading };
 };
