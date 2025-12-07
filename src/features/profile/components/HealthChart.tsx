@@ -19,7 +19,11 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
 
   // 軸のスケール計算用
   const [maxCalorie, setMaxCalorie] = useState(1000);
-  const [maxWeight, setMaxWeight] = useState(100);
+  const [minWeightAxis, setMinWeightAxis] = useState(0);
+  const [maxWeightAxis, setMaxWeightAxis] = useState(100);
+
+  // ツールチップ用データ
+  const [rawWeights, setRawWeights] = useState<(number | null)[]>([]);
 
   const getMonthRange = (date: Date) => {
     const start = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -76,44 +80,75 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         dailyWeights[idx] = d.weight;
       });
 
-      // 体重の穴埋め (線をつなぐため)
-      let lastW = userWeight; 
+      // 体重の穴埋め (線が0に落ちないようにする)
+      let lastW = userWeight || 60;
+      
+      // データがない日も前回の体重で埋めて、線を平らに維持する
       for(let i=0; i<daysInMonth; i++) {
-        if (dailyWeights[i] !== null) lastW = dailyWeights[i];
-        // 未来の日付は埋めない
-        if (i < new Date().getDate() || currentDate < new Date()) {
+        if (dailyWeights[i] !== null) {
+            lastW = dailyWeights[i];
+        } else {
             dailyWeights[i] = lastW;
         }
       }
+      setRawWeights(dailyWeights);
 
-      // 3. スケール計算 (2軸用)
-      const maxCal = Math.max(...dailyCalories, 500); // 最低でも500
-      // 体重の最大・最小（グラフの表示範囲を調整するため）
+      // 3. スケール計算
+      let localMaxCal = Math.max(...dailyCalories);
+      if (localMaxCal < 500) localMaxCal = 500;
+      localMaxCal = Math.ceil(localMaxCal / 100) * 100;
+
       const validWeights = dailyWeights.filter(w => w !== null) as number[];
-      const maxW = validWeights.length > 0 ? Math.max(...validWeights) + 2 : 100; // 少し余裕を持たせる
-      const minW = validWeights.length > 0 ? Math.min(...validWeights) - 2 : 40;
+      let localMinW = 0;
+      let localMaxW = 100;
 
-      setMaxCalorie(maxCal);
-      setMaxWeight(maxW);
+      if (validWeights.length > 0) {
+          const minVal = Math.min(...validWeights);
+          const maxVal = Math.max(...validWeights);
+          
+          const padding = 2; 
+          localMinW = Math.floor(minVal) - padding;
+          localMaxW = Math.ceil(maxVal) + padding;
+          
+          if (localMinW < 0) localMinW = 0;
+          if (localMaxW - localMinW < 5) {
+              localMaxW = localMinW + 5;
+          }
+      } else {
+           const base = userWeight || 60;
+           localMinW = Math.max(0, base - 5);
+           localMaxW = base + 5;
+      }
+
+      setMaxCalorie(localMaxCal);
+      setMinWeightAxis(localMinW);
+      setMaxWeightAxis(localMaxW);
 
       // 4. データ変換
-      // 体重データを、カロリー軸のスケールに合わせて変換する
-      // 公式: 変換後 = (体重 / 体重最大値) * カロリー最大値
-      const scaleFactor = maxCal / maxW;
-
       const formattedBarData = dailyCalories.map((cal, i) => ({
         value: cal,
         label: (i + 1) % 5 === 0 ? (i + 1).toString() : '',
         frontColor: 'rgba(255, 99, 132, 0.6)', 
         spacing: 4,
-        labelTextStyle: { color: '#999', fontSize: 10 }
+        labelTextStyle: { color: '#999', fontSize: 10, width: 20, textAlign: 'center' } 
       }));
 
-      const formattedLineData = dailyWeights.map((w, i) => ({
-        value: w ? w * scaleFactor : 0, // スケーリング
-        dataPointText: '', // 点の上の文字はごちゃつくので消す
-        hideDataPoint: (i + 1) % 5 !== 0,
-      }));
+      const weightRange = localMaxW - localMinW;
+      const formattedLineData = dailyWeights.map((w, i) => {
+        if (w === null) return { value: 0, hideDataPoint: true };
+        
+        let scaledValue = 0;
+        if (weightRange > 0) {
+            scaledValue = ((w - localMinW) / weightRange) * localMaxCal;
+        }
+        
+        return {
+          value: scaledValue,
+          dataPointText: '', 
+          hideDataPoint: (i + 1) % 5 !== 0,
+          customDataPoint: undefined,
+        };
+      });
 
       setBarData(formattedBarData);
       setLineData(formattedLineData);
@@ -133,26 +168,45 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
   };
 
-  // 右軸（体重）の目盛りをレンダリングするコンポーネント
   const RightYAxis = () => {
-    // 5分割くらいで目盛りを表示
-    const steps = 4;
+    const sections = 4;
     const labels = [];
-    for (let i = 0; i <= steps; i++) {
-        const val = Math.round((maxWeight / steps) * i);
-        labels.push(val);
+    const range = maxWeightAxis - minWeightAxis;
+    
+    for (let i = 0; i <= sections; i++) {
+        const val = minWeightAxis + (range * (i / sections));
+        labels.push(Math.round(val * 10) / 10);
     }
-    // 上から順に表示するため反転
+    
     return (
       <View style={styles.rightAxisContainer}>
         {labels.reverse().map((val, i) => (
-          <Text key={i} style={styles.rightAxisText}>{val}kg</Text>
+          <Text key={i} style={styles.rightAxisText}>{val}</Text>
         ))}
-        {/* 下の余白調整 */}
-        <View style={{height: 20}} />
       </View>
     );
   };
+
+  const renderTooltip = (item: any, index: number) => {
+    return (
+      <View style={styles.tooltipContainer}>
+        <Text style={styles.tooltipDate}>
+          {currentDate.getMonth() + 1}/{index + 1}
+        </Text>
+        <Text style={styles.tooltipText}>
+          カロリー: {Math.round(item.value)} kcal
+        </Text>
+        <Text style={styles.tooltipText}>
+          体重: {rawWeights[index] ? `${rawWeights[index]} kg` : '--'}
+        </Text>
+      </View>
+    );
+  };
+
+  // 画面幅
+  const screenWidth = Dimensions.get('window').width;
+  // グラフの幅を計算: 画面幅 - (コンテナ左右パディング32 + 右軸幅50 + 予備マージン20)
+  const chartWidth = screenWidth - 110;
 
   return (
     <View style={styles.container}>
@@ -168,40 +222,39 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.legendContainer}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: 'rgba(255, 99, 132, 0.6)' }]} />
-          <Text style={styles.legendText}>カロリー (左軸)</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendLine, { backgroundColor: '#36A2EB' }]} />
-          <Text style={styles.legendText}>体重 (右軸)</Text>
-        </View>
+      <View style={styles.axisTitleContainer}>
+        <Text style={styles.leftAxisTitle}>消費カロリー (kcal)</Text>
+        <Text style={styles.rightAxisTitle}>体重 (kg)</Text>
       </View>
 
       {loading ? (
         <ActivityIndicator color="#3B82F6" style={{ height: 220 }} />
       ) : (
         <View style={styles.chartRow}>
-            {/* メイングラフ (左軸: カロリー) */}
+            {/* メイングラフ */}
             <BarChart
                 data={barData}
                 barWidth={6}
                 spacing={4}
                 roundedTop
-                hideRules
+                hideRules={false}
+                rulesColor="#eee"
+                rulesType="solid"
                 xAxisThickness={1}
                 yAxisThickness={0}
                 yAxisTextStyle={{ color: '#999', fontSize: 10 }}
                 noOfSections={4}
-                maxValue={maxCalorie} // 左軸の最大値
+                maxValue={maxCalorie}
                 
-                // 折れ線 (体重: スケール変換済み)
+                renderTooltip={renderTooltip}
+                leftShiftForTooltip={20}
+                autoCenterTooltip
+                
                 showLine
                 lineData={lineData}
                 lineConfig={{
                     color: '#36A2EB',
-                    thickness: 3,
+                    thickness: 2,
                     curved: true,
                     hideDataPoints: false,
                     dataPointsColor: '#36A2EB',
@@ -209,11 +262,10 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
                 }}
                 
                 height={200}
-                width={Dimensions.get('window').width - 100} // 右軸のスペース分引く
+                width={chartWidth} // 計算した幅を適用
                 isAnimated
             />
-            
-            {/* 右軸 (体重) */}
+            {/* 右軸 (固定幅) */}
             <RightYAxis />
         </View>
       )}
@@ -233,24 +285,51 @@ const styles = StyleSheet.create({
   navBtn: { padding: 4 },
   monthTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
   
-  legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginBottom: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center' },
-  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-  legendLine: { width: 16, height: 3, borderRadius: 1.5, marginRight: 6 },
-  legendText: { fontSize: 12, color: '#555' },
+  axisTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  leftAxisTitle: { fontSize: 10, color: '#999', fontWeight: 'bold' },
+  rightAxisTitle: { fontSize: 10, color: '#36A2EB', fontWeight: 'bold' },
 
-  chartRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  chartRow: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start',
+    // グラフと軸がはみ出さないようにラップ
+    overflow: 'hidden', 
+  },
   
-  // 右軸のスタイル
   rightAxisContainer: {
     height: 200, 
     justifyContent: 'space-between',
     marginLeft: 4,
-    paddingBottom: 20, // X軸ラベルの高さ分くらい調整
+    width: 50, // 固定幅を確保
   },
   rightAxisText: {
-    fontSize: 10,
-    color: '#36A2EB', // 体重の色に合わせる
+    fontSize: 9, 
+    color: '#36A2EB',
     fontWeight: 'bold',
+    textAlign: 'right',
+    width: '100%',
+    transform: [{ translateY: -5 }] 
+  },
+  tooltipContainer: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 8,
+    borderRadius: 8,
+    zIndex: 1000,
+  },
+  tooltipDate: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  tooltipText: {
+    color: 'white',
+    fontSize: 11,
   }
 });

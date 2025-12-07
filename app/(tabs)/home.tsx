@@ -9,12 +9,21 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ヘッダーを追加 */}
+      {/* ヘッダー */}
       <View style={styles.header}>
         <Text style={styles.title}>WOMA</Text>
-        <TouchableOpacity onPress={() => router.push('/search')}>
-          <Ionicons name="search" size={24} color="#333" />
-        </TouchableOpacity>
+        
+        <View style={styles.headerRight}>
+          {/* グループボタン (追加) */}
+          <TouchableOpacity onPress={() => router.push('/groups')} style={styles.iconButton}>
+            <Ionicons name="people" size={24} color="#333" />
+          </TouchableOpacity>
+          
+          {/* 検索ボタン */}
+          <TouchableOpacity onPress={() => router.push('/search')} style={styles.iconButton}>
+            <Ionicons name="search" size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Timeline />
@@ -38,4 +47,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#3B82F6',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16, // アイコン同士の間隔
+  },
+  iconButton: {
+    padding: 4, // タップ領域を少し広げる
+  }
 });

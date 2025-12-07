@@ -1,28 +1,41 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, limit, where } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 
-export const useTimeline = () => {
+// 引数に groupId (任意) を追加
+export const useTimeline = (groupId?: string) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // timelineコレクションを「作成日時の新しい順」に50件取得
-    const q = query(
-      collection(db, "timeline"),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
+    let q;
+    const timelineRef = collection(db, "timeline");
 
-    // リアルタイム監視 (onSnapshot)
+    if (groupId) {
+      // グループ指定がある場合: そのグループIDを持つ投稿を抽出
+      q = query(
+        timelineRef,
+        where("groupId", "==", groupId),
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
+    } else {
+      // 指定がない場合 (ホーム画面): 全体の投稿を表示
+      q = query(
+        timelineRef,
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
+    }
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedPosts = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
           ...data,
-          // タイムスタンプを文字列に変換（エラー防止）
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString() : 'Just now',
+          // Dateオブジェクトに変換
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
         };
       });
       setPosts(fetchedPosts);
@@ -32,9 +45,8 @@ export const useTimeline = () => {
       setLoading(false);
     });
 
-    // アンマウント時に監視を解除
     return () => unsubscribe();
-  }, []);
+  }, [groupId]); // groupIdが変わったら再実行
 
   return { posts, loading };
 };

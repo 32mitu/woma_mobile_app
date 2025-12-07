@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Image } from 'react-native';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, increment, doc } from 'firebase/firestore';
-import { db, auth } from '../../../../firebaseConfig'; // パスは環境に合わせて調整
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, increment, doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../../../../firebaseConfig';
 import { timeAgo } from '../utils/timelineUtils';
 import { Ionicons } from '@expo/vector-icons';
 
 type CommentSectionProps = {
   postId: string;
+  onCommentAdded?: () => void; // ★追加
 };
 
-export const CommentSection = ({ postId }: CommentSectionProps) => {
+export const CommentSection = ({ postId, onCommentAdded }: CommentSectionProps) => {
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // コメント監視
   useEffect(() => {
     const q = query(
       collection(db, "timeline", postId, "comments"),
@@ -28,19 +28,16 @@ export const CommentSection = ({ postId }: CommentSectionProps) => {
     return unsubscribe;
   }, [postId]);
 
-  // コメント送信処理
   const handleSend = async () => {
     if (!inputText.trim()) return;
     if (!auth.currentUser) return Alert.alert("エラー", "ログインが必要です");
 
     setSubmitting(true);
     try {
-      // ユーザー情報を取得 (本来はContextやReduxから取るのが理想)
       const user = auth.currentUser;
-      const userDoc = await import('firebase/firestore').then(mod => mod.getDoc(doc(db, 'users', user.uid)));
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
       const userData = userDoc.data();
 
-      // コメント追加
       await addDoc(collection(db, "timeline", postId, "comments"), {
         text: inputText.trim(),
         userId: user.uid,
@@ -50,12 +47,17 @@ export const CommentSection = ({ postId }: CommentSectionProps) => {
         likes: 0,
       });
 
-      // 投稿本体のコメント数をインクリメント
       await updateDoc(doc(db, "timeline", postId), {
         comments: increment(1)
       });
 
       setInputText("");
+      
+      // ★追加: 親コンポーネントに通知して即座にカウントアップ
+      if (onCommentAdded) {
+        onCommentAdded();
+      }
+
     } catch (error) {
       console.error(error);
       Alert.alert("エラー", "コメントの送信に失敗しました");
@@ -68,18 +70,17 @@ export const CommentSection = ({ postId }: CommentSectionProps) => {
 
   return (
     <View style={styles.container}>
-      {/* コメントリスト */}
       {comments.map((item) => (
         <View key={item.id} style={styles.commentItem}>
           <Text style={styles.commentHeader}>
             <Text style={styles.username}>{item.username}</Text>
-            <Text style={styles.date}> • {timeAgo(item.createdAt)}</Text>
+            {/* 日付はサーバータイムスタンプなので、書き込み直後はnullの場合がある対策 */}
+            <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : '今'}</Text>
           </Text>
           <Text style={styles.commentText}>{item.text}</Text>
         </View>
       ))}
 
-      {/* 入力フォーム */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}

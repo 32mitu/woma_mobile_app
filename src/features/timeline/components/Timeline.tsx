@@ -1,10 +1,14 @@
 import React from 'react';
 import { View, FlatList, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { Post } from './Post';
-import { useTimeline } from '../hooks/useTimeline'; // ★作成したフックをインポート
+import { useTimeline } from '../hooks/useTimeline';
 
-export const Timeline = () => {
-  const { posts, loading } = useTimeline(); // ★リアルデータを取得
+type Props = {
+  groupId?: string;
+};
+
+export const Timeline = ({ groupId }: Props) => {
+  const { posts, loading } = useTimeline(groupId);
 
   if (loading) {
     return (
@@ -17,7 +21,9 @@ export const Timeline = () => {
   if (posts.length === 0) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyText}>まだ投稿がありません。</Text>
+        <Text style={styles.emptyText}>
+          {groupId ? "まだグループの投稿がありません。" : "まだ投稿がありません。"}
+        </Text>
         <Text style={styles.emptyText}>最初の1人になりませんか？</Text>
       </View>
     );
@@ -27,18 +33,21 @@ export const Timeline = () => {
     <View style={styles.container}>
       <FlatList
         data={posts}
-        // Firestoreのデータ形式をPostコンポーネントに合わせて整形
+        scrollEnabled={!groupId}
         renderItem={({ item }) => (
           <Post 
             post={{
               id: item.id,
               user: item.username || "名無し",
-              userAvatar: item.userIcon || null,
-              text: item.text || item.comment || "", // 念のため両方チェック
-              imageUrl: item.imageUrls?.[0] || null, // 1枚目の画像を表示
+              userAvatar: item.profileImageUrl || item.userIcon || null,
+              text: item.text || item.comment || "",
+              imageUrl: item.imageUrls?.[0] || null,
               likes: item.likes || 0,
+              comments: item.comments || 0,
               timestamp: item.createdAt,
-            }} 
+              // ★修正: 運動記録データ (activities) を渡す
+              activities: item.activities || [], 
+            }}
           />
         )}
         keyExtractor={(item) => item.id}
@@ -56,14 +65,14 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   center: {
-    flex: 1,
+    padding: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   emptyText: {
     fontSize: 16,
     color: '#888',
     marginBottom: 8,
+    textAlign: 'center',
   },
 });
