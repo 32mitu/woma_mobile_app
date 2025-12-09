@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react'; // useState, useEffectは不要になるため削除可能ですが、残してもOK
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
-import { useSocial } from '../hooks/useSocial';
-// ★追加: ルーター
+import { useSocial, useIsFollowing } from '../hooks/useSocial'; // ★追加
 import { useRouter } from 'expo-router';
 
 type Props = {
@@ -10,35 +9,29 @@ type Props = {
 };
 
 export default function UserCard({ user }: Props) {
-  const router = useRouter(); // ★追加
+  const router = useRouter();
   const { userProfile } = useAuth();
   const { followUser, unfollowUser, loading } = useSocial();
-
-  const isInitiallyFollowing = (userProfile as any)?.following?.includes(user.uid) || false;
-  const [isFollowing, setIsFollowing] = useState(isInitiallyFollowing);
+  
+  // ★修正: データベースのリアルタイムな状態を取得
+  const isFollowing = useIsFollowing(user.uid);
+  
   const isMe = userProfile?.uid === user.uid;
 
-  useEffect(() => {
-    setIsFollowing(isInitiallyFollowing);
-  }, [isInitiallyFollowing]);
-
   const handleFollowPress = async () => {
-    const nextState = !isFollowing;
-    setIsFollowing(nextState);
-    if (nextState) {
-      await followUser(user.uid);
-    } else {
+    // 現在の状態に応じて切り替え
+    if (isFollowing) {
       await unfollowUser(user.uid);
+    } else {
+      await followUser(user.uid);
     }
   };
 
-  // ★追加: プロフィール画面への遷移
   const handleCardPress = () => {
     router.push(`/public/${user.uid}`);
   };
 
   return (
-    // ★修正: カード全体をTouchableOpacityにする
     <TouchableOpacity style={styles.card} onPress={handleCardPress}>
       <Image 
         source={{ uri: user.profileImageUrl || user.photoURL || 'https://via.placeholder.com/50' }} 
@@ -61,6 +54,7 @@ export default function UserCard({ user }: Props) {
           disabled={loading}
         >
           <Text style={[styles.buttonText, isFollowing ? styles.followingText : styles.followText]}>
+            {/* loading中は ... を表示、それ以外はDBの状態に基づいて表示 */}
             {loading ? '...' : (isFollowing ? 'フォロー中' : 'フォロー')}
           </Text>
         </TouchableOpacity>

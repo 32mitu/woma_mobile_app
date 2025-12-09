@@ -7,14 +7,18 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kouheimitsumura.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,8 +32,15 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       "react-native-health"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "03457d1f-c639-416b-ae61-1538203cde78"
+      }
+    },
+    "owner": "3332"
   }
 }
-
