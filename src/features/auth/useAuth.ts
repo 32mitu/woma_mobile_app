@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot } from "firebase/firestore"; // getDoc から onSnapshot に変更
+import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth'; // ★ signOutを追加
+import { doc, onSnapshot } from "firebase/firestore"; 
 import { auth, db } from '../../../firebaseConfig';
 
 // ユーザー情報の型定義
@@ -23,24 +23,20 @@ export const useAuth = () => {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      // ログアウト時はここでロード完了＆データクリア
       if (!firebaseUser) {
         setUserProfile(null);
         setLoading(false);
       }
     });
-
     return () => unsubscribeAuth();
   }, []);
 
-  // 2. ユーザープロフィールのリアルタイム監視 (userステートに依存)
+  // 2. ユーザープロフィールのリアルタイム監視
   useEffect(() => {
     if (!user) return;
-
     setLoading(true);
     const userDocRef = doc(db, "users", user.uid);
 
-    // onSnapshot を使用して、データの変更をリアルタイムに検知する
     const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -54,7 +50,6 @@ export const useAuth = () => {
           bio: data.bio || "",
         });
       } else {
-        // データがない場合の初期値
         setUserProfile({
           uid: user.uid,
           email: user.email,
@@ -67,9 +62,19 @@ export const useAuth = () => {
       setLoading(false);
     });
 
-    // アンマウント時、またはユーザー切り替え時に監視を解除
     return () => unsubscribeSnapshot();
   }, [user]);
 
-  return { user, userProfile, loading };
+  // ★ 3. ログアウト関数を追加
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth);
+    } catch (error) {
+      console.error("ログアウトエラー:", error);
+      throw error;
+    }
+  };
+
+  // ★ signOut を return に含める
+  return { user, userProfile, loading, signOut };
 };

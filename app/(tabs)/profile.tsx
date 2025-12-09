@@ -1,18 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, SafeAreaView, Alert, Text } from 'react-native';
 import { useRouter } from 'expo-router';
+// ★ useAuth から signOut を直接取得するので、authServiceのインポートは削除
 import { useAuth } from '../../src/features/auth/useAuth';
+
 // コンポーネントのインポート
 import { ProfileHeader } from '../../src/features/profile/components/ProfileHeader';
 import { HealthChart } from '../../src/features/profile/components/HealthChart';
-import { CalendarView } from '../../src/features/calendar/components/CalendarView'; // ★追加: カレンダー
+import { CalendarView } from '../../src/features/calendar/components/CalendarView';
 import { ActivityLog } from '../../src/features/calendar/components/ActivityLog';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  // ★ ここで signOut を取り出す
   const { userProfile, signOut } = useAuth();
+  
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(new Date()); // リフレッシュ用トリガー
+  // ★ 重複していた行を1つだけに修正
+  const [lastUpdate, setLastUpdate] = useState(new Date()); 
 
   // 引っ張って更新
   const onRefresh = async () => {
@@ -28,7 +33,7 @@ export default function ProfileScreen() {
         text: "ログアウト", 
         style: "destructive",
         onPress: async () => {
-          await signOut();
+          await signOut(); // useAuthの関数を使用
           router.replace('/'); 
         }
       }
@@ -47,13 +52,13 @@ export default function ProfileScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3B82F6" />
         }
       >
-        {/* 1. ヘッダー (アイコン・フォロー数など) */}
+        {/* 1. ヘッダー */}
         <ProfileHeader 
           userProfile={userProfile} 
           onLogout={handleLogout} 
         />
 
-        {/* 2. 健康・カロリー分析 (2軸グラフ) */}
+        {/* 2. 健康・カロリー分析 */}
         {userProfile.weight ? (
           <HealthChart 
             userId={userProfile.uid} 
@@ -68,7 +73,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* 3. カレンダー (★ここに追加) */}
+        {/* 3. カレンダー */}
         <CalendarView />
 
         {/* 4. 最近の活動ログ */}
