@@ -6,6 +6,8 @@ import { db, auth } from '../../firebaseConfig';
 import { ActivityLog } from '../../src/features/profile/components/ActivityLog';
 import { Ionicons } from '@expo/vector-icons';
 import { useSocial, useFollowStatus } from '../../src/features/social/hooks/useSocial';
+// ★追加: 安全機能（通報・ブロック）をインポート
+import { useSafety } from '../../src/hooks/useSafety';
 
 export default function PublicProfileScreen() {
   const { uid } = useLocalSearchParams();
@@ -19,6 +21,9 @@ export default function PublicProfileScreen() {
 
   const { followUser, unfollowUser, loading: actionLoading } = useSocial();
   const { isFollowing, isMutual } = useFollowStatus(targetUserId);
+  
+  // ★追加: useSafetyフックを使用
+  const { reportContent, blockUser } = useSafety();
 
   useEffect(() => {
     if (!targetUserId) return;
@@ -49,27 +54,43 @@ export default function PublicProfileScreen() {
     }
   };
 
-  // ★修正: デバッグログ付きの遷移処理
   const handleMessagePress = () => {
-    console.log("\n🟢 [Debug] 緑のメッセージボタンが押されました");
-    console.log(`   - 自分: ${currentUserId}`);
-    console.log(`   - 相手: ${targetUserId}`);
-    console.log(`   - 相互フォロー: ${isMutual}`);
-
     if (!targetUserId) {
-      console.error("❌ [Error] 相手のIDが不明です。遷移を中止します。");
+      console.error("❌ [Error] 相手のIDが不明です。");
       return;
     }
+    // DM画面への遷移
+    router.push(`/dm/${targetUserId}`);
+  };
 
-    const path = `/dm/${targetUserId}`;
-    console.log(`👉 [Router] 次のパスへ遷移を試みます: ${path}`);
+  // ★追加: メニュー（通報・ブロック）の表示ロジック
+  const handleOptions = () => {
+    if (!currentUserId || !targetUserId) return;
     
-    try {
-      router.push(path);
-      console.log("✅ [Router] router.push 実行完了");
-    } catch (error) {
-      console.error("❌ [Router Error] 遷移に失敗しました:", error);
-    }
+    Alert.alert(
+      'メニュー', 
+      `${profileData?.username || 'このユーザー'}に対する操作`, 
+      [
+        { 
+          text: '通報する', 
+          style: 'destructive', 
+          onPress: () => {
+            // 'user' タイプとして通報
+            reportContent(targetUserId, 'user', '不適切なユーザープロフィール');
+          }
+        },
+        { 
+          text: 'ブロックする', 
+          style: 'destructive', 
+          onPress: async () => {
+            await blockUser(targetUserId);
+            // ブロック後はプロフィールを見られないように戻る
+            router.back();
+          } 
+        },
+        { text: 'キャンセル', style: 'cancel' }
+      ]
+    );
   };
 
   if (loadingProfile) return <ActivityIndicator style={styles.center} size="large" color="#3B82F6" />;
@@ -81,6 +102,13 @@ export default function PublicProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
+
+        {/* ★追加: 自分以外のプロフィールの場合、右上にメニューボタンを表示 */}
+        {currentUserId !== targetUserId && (
+          <TouchableOpacity onPress={handleOptions} style={styles.menuButton}>
+            <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+          </TouchableOpacity>
+        )}
         
         <Image 
           source={{ uri: profileData.profileImageUrl || 'https://via.placeholder.com/100' }} 
@@ -101,7 +129,7 @@ export default function PublicProfileScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* DMボタン: 相互フォロー時のみ表示 */}
+            {/* 相互フォローの場合のみDMボタンを表示 */}
             {isMutual && (
               <TouchableOpacity style={styles.dmButton} onPress={handleMessagePress}>
                 <Ionicons name="chatbubble-ellipses" size={20} color="white" />
@@ -121,9 +149,15 @@ export default function PublicProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { backgroundColor: 'white', padding: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  backButton: { position: 'absolute', top: 16, left: 16, zIndex: 10 },
-  avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 12, backgroundColor: '#eee' },
+  header: { backgroundColor: 'white', padding: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee', position: 'relative' },
+  
+  // 戻るボタンの位置調整
+  backButton: { position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8 },
+  
+  // ★追加: メニューボタンのスタイル（右上に配置）
+  menuButton: { position: 'absolute', top: 16, right: 16, zIndex: 10, padding: 8 },
+  
+  avatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 12, backgroundColor: '#eee', marginTop: 20 },
   username: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 4 },
   bio: { fontSize: 14, color: '#666', marginBottom: 20, textAlign: 'center' },
   actionButtons: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 10 },

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'; // ★ useEffectを追加
+import React, { useState, useEffect } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, Alert, 
-  KeyboardAvoidingView, Platform, ScrollView, SafeAreaView, StyleSheet, ActivityIndicator 
+  KeyboardAvoidingView, Platform, ScrollView, SafeAreaView, StyleSheet, ActivityIndicator,
+  Linking // ★追加: 外部リンクを開くために必要
 } from 'react-native';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -13,8 +14,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 
 export default function LoginScreen() {
   const router = useRouter();
-  // ★ useAuthから user と loading (初期判定用) を取得
-  // ローカルの loading と名前が被るので authLoading という名前に変更して受け取る
+  // useAuthから user と loading (初期判定用) を取得
   const { signInWithGoogle, signInWithApple, user, loading: authLoading } = useAuth();
   
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -22,18 +22,24 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   
-  // ボタン押下時のローディング用 (authLoadingと区別)
+  // ボタン押下時のローディング用
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ★追加: ログイン済みならホームへ転送する処理
+  // ログイン済みならホームへ転送
   useEffect(() => {
-    // 読み込みが終わり、かつユーザーが存在すればホームへ
     if (!authLoading && user) {
       router.replace('/(tabs)/home');
     }
   }, [user, authLoading]);
 
-  // ★追加: 認証確認中、または転送待機中は画面を表示せずローディング
+  // ★追加: 利用規約を開く処理 (Apple標準EULA または 自社サイトの規約URL)
+  const openTerms = () => {
+    // 審査提出時はApple標準EULAのURLでも通過することが多いですが、
+    // 独自Webページがある場合はそちらに差し替えてください。
+    Linking.openURL('https://note.com/kumaotoko32/n/na56855828e87?app_launch=false');
+  };
+
+  // 認証確認中、または転送待機中は画面を表示せずローディング
   if (authLoading || user) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -48,12 +54,16 @@ export default function LoginScreen() {
       Alert.alert("エラー", "すべての項目を入力してください");
       return;
     }
-    setIsSubmitting(true); // loading -> isSubmitting
+    setIsSubmitting(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      await setDoc(doc(db, "users", user.uid), {
+      const newUser = userCredential.user; // 変数名を明確化
+      
+      // Firestoreにユーザー情報を作成
+      await setDoc(doc(db, "users", newUser.uid), {
+        uid: newUser.uid, // uidも保存しておくと便利
         username: username,
+        email: email, // emailも保存
         bio: "",
         profileImageUrl: "",
         createdAt: serverTimestamp(),
@@ -99,6 +109,10 @@ export default function LoginScreen() {
       router.replace('/(tabs)/home');
     } catch (error) {
       console.error("Google Login Error:", error);
+      // キャンセル時はアラートを出さない方がUXが良い
+      if (error !== 'cancel') {
+         // 必要ならアラート
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -174,10 +188,25 @@ export default function LoginScreen() {
               onPress={isLoginMode ? handleLogin : handleSignUp}
               disabled={isSubmitting}
             >
-              <Text style={styles.buttonText}>
-                {isSubmitting ? '処理中...' : (isLoginMode ? 'ログイン' : '新規登録')}
-              </Text>
+              {isSubmitting ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.buttonText}>
+                  {isSubmitting ? '処理中...' : (isLoginMode ? 'ログイン' : '新規登録')}
+                </Text>
+              )}
             </TouchableOpacity>
+
+            {/* ★追加: 規約への同意文言 (新規登録時のみ表示) */}
+            {!isLoginMode && (
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsText}>
+                  登録することで、
+                  <Text style={styles.linkText} onPress={openTerms}>利用規約</Text>
+                  に同意したものとみなされます。
+                </Text>
+              </View>
+            )}
 
             {/* --- ソーシャルログイン --- */}
             <View style={styles.dividerContainer}>
@@ -213,7 +242,7 @@ export default function LoginScreen() {
               style={styles.switchButton}
             >
               <Text style={styles.switchText}>
-                {isLoginMode ? 'アカウントを作成する' : 'すでにアカウントをお持ちの方'}
+                {isLoginMode ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -270,5 +299,10 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     color: '#374151', fontWeight: 'bold', fontSize: 16
-  }
+  },
+
+  // ★追加: 規約同意のスタイル
+  termsContainer: { marginTop: 12, alignItems: 'center' },
+  termsText: { fontSize: 12, color: '#6B7280', textAlign: 'center' },
+  linkText: { color: '#3B82F6', fontWeight: 'bold' },
 });

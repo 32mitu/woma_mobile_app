@@ -14,15 +14,17 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.kouheimitsumura.app",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSHealthShareUsageDescription": "運動記録を自動入力するために歩数データを利用します。",
-        "NSHealthUpdateUsageDescription": "運動データを記録するためにヘルスケアデータを利用します。",
+        "NSHealthShareUsageDescription": "WOMA uses your step count data to visualize your daily activity and encourage habit building.",
+        "NSHealthUpdateUsageDescription": "WOMA saves your workout sessions to Apple Health to keep your activity data synced.",
+        "NSCameraUsageDescription": "WOMA needs camera access to take photos for your profile and workout posts.",
+        "NSPhotoLibraryUsageDescription": "WOMA needs access to your photos to let you choose images for your profile and workout posts.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -38,24 +40,35 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.kouheimitsumura.app"
+      "package": "com.kouheimitsumura.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.WRITE_STEPS",
+        "com.google.android.gms.permission.ACTIVITY_RECOGNITION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-dev-client",
-      "react-native-health",
-      "expo-apple-authentication",
-      "@react-native-google-signin/google-signin"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "03457d1f-c639-416b-ae61-1538203cde78"
       }
-    },
-    "owner": "3332"
+    }
   }
 }
