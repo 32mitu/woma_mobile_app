@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, SafeAreaView, Alert, Text } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, SafeAreaView, Alert, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-// ★ useAuth から signOut を直接取得するので、authServiceのインポートは削除
+// deleteAccount を追加で取得
 import { useAuth } from '../../src/features/auth/useAuth';
+import { Ionicons } from '@expo/vector-icons';
 
 // コンポーネントのインポート
 import { ProfileHeader } from '../../src/features/profile/components/ProfileHeader';
@@ -12,20 +13,21 @@ import { ActivityLog } from '../../src/features/calendar/components/ActivityLog'
 
 export default function ProfileScreen() {
   const router = useRouter();
-  // ★ ここで signOut を取り出す
-  const { userProfile, signOut } = useAuth();
+  // ★ deleteAccount をここで取得
+  const { userProfile, signOut, deleteAccount } = useAuth();
   
   const [refreshing, setRefreshing] = useState(false);
-  // ★ 重複していた行を1つだけに修正
   const [lastUpdate, setLastUpdate] = useState(new Date()); 
+  const [isDeleting, setIsDeleting] = useState(false); // 削除処理中のフラグ
 
   // 引っ張って更新
   const onRefresh = async () => {
     setRefreshing(true);
-    setLastUpdate(new Date()); // 各コンポーネントに再取得を促す
+    setLastUpdate(new Date()); 
     setTimeout(() => setRefreshing(false), 1000);
   };
 
+  // ログアウト処理
   const handleLogout = async () => {
     Alert.alert("ログアウト", "本当にログアウトしますか？", [
       { text: "キャンセル", style: "cancel" },
@@ -33,15 +35,47 @@ export default function ProfileScreen() {
         text: "ログアウト", 
         style: "destructive",
         onPress: async () => {
-          await signOut(); // useAuthの関数を使用
+          await signOut(); 
           router.replace('/'); 
         }
       }
     ]);
   };
 
+  // ★追加: アカウント削除処理
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "アカウント削除 (退会)",
+      "この操作は取り消せません。\n全てのデータ（記録、投稿、設定）が永久に削除されます。\n本当に実行しますか？",
+      [
+        { text: "キャンセル", style: "cancel" },
+        { 
+          text: "削除する", 
+          style: "destructive",
+          onPress: async () => {
+            performDelete();
+          }
+        }
+      ]
+    );
+  };
+
+  const performDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      Alert.alert("削除完了", "アカウントを削除しました。", [
+        { text: "OK", onPress: () => router.replace('/') }
+      ]);
+    } catch (error: any) {
+      Alert.alert("エラー", error.message || "削除に失敗しました。");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!userProfile) {
-    return <View style={styles.container} />; // ロード中
+    return <View style={styles.container} />; 
   }
 
   return (
@@ -52,7 +86,7 @@ export default function ProfileScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3B82F6" />
         }
       >
-        {/* 1. ヘッダー */}
+        {/* 1. ヘッダー (ログアウトボタン含む) */}
         <ProfileHeader 
           userProfile={userProfile} 
           onLogout={handleLogout} 
@@ -78,6 +112,25 @@ export default function ProfileScreen() {
 
         {/* 4. 最近の活動ログ */}
         <ActivityLog userId={userProfile.uid} />
+        
+        {/* 5. ★追加: アカウント削除エリア (Danger Zone) */}
+        <View style={styles.dangerZone}>
+          <Text style={styles.dangerTitle}>アカウント管理</Text>
+          <TouchableOpacity 
+            style={[styles.deleteButton, isDeleting && styles.disabledButton]} 
+            onPress={handleDeleteAccount}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator color="#EF4444" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                <Text style={styles.deleteText}>アカウントを削除する (退会)</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
         
         {/* 下部の余白 */}
         <View style={{ height: 40 }} />
@@ -106,5 +159,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 13,
     lineHeight: 20,
+  },
+  // ★追加スタイリング
+  dangerZone: {
+    marginTop: 24,
+    padding: 16,
+    // borderTopWidth: 1,
+    // borderTopColor: '#E5E7EB',
+  },
+  dangerTitle: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2', // 薄い赤
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    gap: 8,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  deleteText: {
+    color: '#EF4444', // 赤文字
+    fontWeight: 'bold',
+    fontSize: 15,
   }
 });

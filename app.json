@@ -16,12 +16,20 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kouheimitsumura.app",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "運動記録を自動入力するために歩数データを利用します。",
-        "NSHealthUpdateUsageDescription": "運動データを記録するためにヘルスケアデータを利用します。"
+        "NSHealthUpdateUsageDescription": "運動データを記録するためにヘルスケアデータを利用します。",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.540454404812-p95ail006s113tvlthe8vb542a953c4j"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -38,7 +46,9 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      "react-native-health"
+      "react-native-health",
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "router": {},

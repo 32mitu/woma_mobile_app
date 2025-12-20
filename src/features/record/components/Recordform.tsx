@@ -9,34 +9,54 @@ import { RecordFormInputs } from './RecordformInputs';
 import { ExerciseSelector } from './ExerciseSelector';
 import { CreateExerciseTypeForm } from './CreateExerciseTypeForm';
 import { Ionicons } from '@expo/vector-icons';
+import { useHealthKit } from '../../../hooks/useHealthKit';
 
 export const RecordForm = () => {
   const router = useRouter();
   const { userProfile } = useAuth();
   
-  // マスタデータ取得 Hooks
   const { availableTypes, createNewExerciseType } = useExerciseTypes(userProfile);
-  
   const { saveRecord, saving } = useRecordSaver();
+  const { getTodaySteps, loading: healthLoading } = useHealthKit();
 
-  // State
   const [activities, setActivities] = useState<any[]>([]);
-  const [weight, setWeight] = useState('');
+  const [weight, setWeight] = useState(''); 
   const [comment, setComment] = useState('');
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [postToTimeline, setPostToTimeline] = useState(true);
 
-  // Modals
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
 
-  // 運動追加ロジック
+  // 体重の決定 (入力値優先、なければプロフィール)
+  const effectiveWeight = weight || (userProfile?.weight ? String(userProfile.weight) : '');
+
   const handleAddActivity = () => {
     setSelectorVisible(true);
   };
 
+  // ★修正ポイント: データ構造の違いを吸収するロジック
   const handleSelectExercise = (type: any) => {
-    // ★修正: ここで undefined が入らないようにデフォルト値(0)を設定
+    let lowVal, midVal, highVal;
+
+    // パターンA: metsValues オブジェクトを持っている場合 (デフォルトのマスタデータなど)
+    if (type.metsValues) {
+      lowVal = type.metsValues['低'];
+      midVal = type.metsValues['中'];
+      highVal = type.metsValues['高'];
+    } 
+    // パターンB: フラットな構造の場合 (自分で作ったカスタム運動など)
+    else {
+      lowVal = type.low;
+      midVal = type.mid;
+      highVal = type.high;
+    }
+
+    // 数値変換と安全策 (NaNならデフォルト値へ)
+    const low = parseFloat(lowVal) || 3.0;
+    const mid = parseFloat(midVal) || 3.5; // ここで正しい値 (例: ウォーキングなら4) が入る
+    const high = parseFloat(highVal) || 5.0;
+
     setActivities([
       ...activities,
       {
@@ -44,12 +64,9 @@ export const RecordForm = () => {
         name: type.name || '名称不明',
         intensity: '中',
         duration: 30, 
-        mets: type.mid ?? 0, // undefinedなら0にする
-        baseMets: { 
-          low: type.low ?? 0, 
-          mid: type.mid ?? 0, 
-          high: type.high ?? 0 
-        }
+        steps: 0, 
+        mets: mid, // デフォルト強度「中」のMETsをセット
+        baseMets: { low, mid, high }
       }
     ]);
     setSelectorVisible(false);
@@ -61,7 +78,7 @@ export const RecordForm = () => {
       
       if (field === 'intensity') {
         // 強度が変わったらMETsも更新
-        const newMets = act.baseMets[value === '低' ? 'low' : value === '高' ? 'high' : 'mid'] ?? 0;
+        const newMets = act.baseMets[value === '低' ? 'low' : value === '高' ? 'high' : 'mid'] ?? 3.5;
         return { ...act, intensity: value, mets: newMets };
       }
       return { ...act, [field]: value };
@@ -72,13 +89,68 @@ export const RecordForm = () => {
     setActivities(activities.filter(a => a.id !== id));
   };
 
+  const handleImportHealthData = async () => {
+    try {
+      const steps = await getTodaySteps();
+      
+      if (!steps || steps === 0) {
+        Alert.alert("通知", "今日の歩数データが見つかりませんでした。(または0歩)");
+        return;
+      }
+
+      const walkIndex = activities.findIndex(a => a.name.includes('ウォーキング') || a.name.includes('歩行'));
+      
+      if (walkIndex >= 0) {
+        const updated = [...activities];
+        updated[walkIndex].steps = steps;
+        setActivities(updated);
+        Alert.alert("更新完了", `既存のウォーキング記録に ${steps.toLocaleString()}歩 を設定しました。`);
+      } else {
+        // マスタから「ウォーキング」を探す
+        const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
+        
+        // ウォーキングのMETsを取得 (なければデフォルト)
+        let wLow = 3.0, wMid = 3.5, wHigh = 4.0;
+        if (walkType) {
+            if (walkType.metsValues) {
+                wLow = walkType.metsValues['低'] || 3.0;
+                wMid = walkType.metsValues['中'] || 3.5;
+                wHigh = walkType.metsValues['高'] || 4.0;
+            } else {
+                wLow = walkType.low || 3.0;
+                wMid = walkType.mid || 3.5;
+                wHigh = walkType.high || 4.0;
+            }
+        }
+
+        const newActivity = {
+          id: Date.now().toString(),
+          name: walkType?.name || 'ウォーキング',
+          intensity: '中',
+          duration: 0, 
+          steps: steps,
+          mets: Number(wMid),
+          baseMets: {
+            low: Number(wLow),
+            mid: Number(wMid),
+            high: Number(wHigh),
+          }
+        };
+        setActivities([...activities, newActivity]);
+        Alert.alert("連携完了", `ヘルスケアから ${steps.toLocaleString()}歩 を取得しました。`);
+      }
+    } catch (error) {
+      console.error("HealthKit Error:", error);
+      Alert.alert("エラー", "ヘルスケアデータの取得に失敗しました。設定 > プライバシー > ヘルスケア から権限を確認してください。");
+    }
+  };
+
   const handleCreateSubmit = async (data: { name: string, low: number, mid: number, high: number }) => {
     await createNewExerciseType(data);
     setCreateVisible(false);
   };
 
   const handleSave = async () => {
-    // バリデーション
     if (activities.length === 0 && !comment.trim() && imageUris.length === 0 && !weight) {
       Alert.alert('エラー', '記録する内容（運動、体重、コメント、写真のいずれか）を入力してください');
       return;
@@ -98,9 +170,25 @@ export const RecordForm = () => {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <Text style={styles.pageTitle}>今日の記録</Text>
 
-        {/* 運動リストセクション */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>運動メニュー</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={styles.sectionTitle}>運動メニュー</Text>
+            
+            <TouchableOpacity 
+              style={styles.healthButton} 
+              onPress={handleImportHealthData}
+              disabled={healthLoading}
+            >
+              {healthLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Ionicons name="fitness" size={16} color="white" />
+              )}
+              <Text style={styles.healthButtonText}>
+                {healthLoading ? '取得中...' : 'iPhoneの歩数を取得'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           
           {activities.length === 0 ? (
             <Text style={styles.emptyText}>まだ追加されていません</Text>
@@ -112,6 +200,7 @@ export const RecordForm = () => {
                 activity={act}
                 onUpdate={handleUpdateActivity}
                 onRemove={handleRemoveActivity}
+                weight={effectiveWeight} 
               />
             ))
           )}
@@ -122,7 +211,6 @@ export const RecordForm = () => {
           </TouchableOpacity>
         </View>
 
-        {/* 入力フォーム */}
         <RecordFormInputs
           weight={weight}
           setWeight={setWeight}
@@ -134,7 +222,6 @@ export const RecordForm = () => {
           setPostToTimeline={setPostToTimeline}
         />
 
-        {/* 保存ボタン */}
         <TouchableOpacity 
           style={[styles.submitButton, saving && styles.disabled]} 
           onPress={handleSave}
@@ -149,7 +236,6 @@ export const RecordForm = () => {
 
       </ScrollView>
 
-      {/* 運動選択モーダル */}
       <ExerciseSelector
         visible={selectorVisible}
         availableTypes={availableTypes}
@@ -161,7 +247,6 @@ export const RecordForm = () => {
         }}
       />
 
-      {/* 新規作成モーダル */}
       <CreateExerciseTypeForm
         visible={createVisible}
         onSubmit={handleCreateSubmit}
@@ -175,7 +260,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#fff' },
   pageTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: '#1F2937' },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
   emptyText: { textAlign: 'center', color: '#9CA3AF', marginBottom: 12, fontSize: 14 },
   addButton: { 
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', 
@@ -189,4 +274,18 @@ const styles = StyleSheet.create({
   },
   disabled: { backgroundColor: '#93C5FD' },
   submitText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  healthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981', 
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 4,
+  },
+  healthButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
 });

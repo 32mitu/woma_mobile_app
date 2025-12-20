@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native'; // 標準のImageに戻す
 import { useRouter } from 'expo-router';
 import { collection, query, where, orderBy, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -15,7 +15,6 @@ export default function ChatListScreen() {
   useEffect(() => {
     if (!userProfile?.uid) return;
 
-    // 自分のチャットルームをリアルタイム監視
     const q = query(
       collection(db, 'chatRooms'),
       where('members', 'array-contains', userProfile.uid),
@@ -23,29 +22,31 @@ export default function ChatListScreen() {
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const rooms: any[] = [];
-      
       const promises = snapshot.docs.map(async (roomDoc) => {
         const data = roomDoc.data();
         const partnerId = data.members.find((id: string) => id !== userProfile.uid);
-        
-        // ★ 未読数の取得 (自分のIDのキーを見る)
         const unreadCount = data.unreadCounts?.[userProfile.uid] || 0;
 
-        // 相手の名前などはキャッシュ(memberInfo)から取るのが理想だが、
-        // 今回は既存実装に合わせて都度取得（または仮置き）
         let partnerName = 'ユーザー';
         let partnerAvatar = null;
-        
-        try {
-            // N+1回避のため、本来は chatRooms に memberInfo を持たせるべき
+
+        // キャッシュがあればそれを使う
+        if (data.memberInfo && data.memberInfo[partnerId]) {
+          const info = data.memberInfo[partnerId];
+          partnerName = info.name;
+          partnerAvatar = info.avatar;
+        } else {
+          try {
             const userSnap = await getDoc(doc(db, 'users', partnerId));
             if (userSnap.exists()) {
-                const uData = userSnap.data();
-                partnerName = uData.username;
-                partnerAvatar = uData.profileImageUrl;
+              const uData = userSnap.data();
+              partnerName = uData.username || 'ユーザー';
+              partnerAvatar = uData.profileImageUrl;
             }
-        } catch(e) {}
+          } catch (e) {
+            console.warn('ユーザー情報取得失敗', e);
+          }
+        }
 
         return {
           id: roomDoc.id,
@@ -54,7 +55,7 @@ export default function ChatListScreen() {
           partnerAvatar,
           lastMessage: data.lastMessage,
           updatedAt: data.updatedAt?.toDate(),
-          unreadCount, // ★追加
+          unreadCount,
         };
       });
 
@@ -67,7 +68,7 @@ export default function ChatListScreen() {
   }, [userProfile]);
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator /></View>;
+    return <View style={styles.center}><ActivityIndicator color="#3B82F6" /></View>;
   }
 
   return (
@@ -80,21 +81,22 @@ export default function ChatListScreen() {
             style={styles.item} 
             onPress={() => router.push(`/dm/${item.partnerId}`)}
           >
+            {/* 標準のImageを使用 */}
             <Image 
-              source={{ uri: item.partnerAvatar || 'https://via.placeholder.com/50' }} 
-              style={styles.avatar} 
+              source={{ uri: item.partnerAvatar || 'https://via.placeholder.com/150' }} 
+              style={styles.avatar}
             />
             <View style={styles.content}>
               <View style={styles.row}>
-                <Text style={styles.name}>{item.partnerName}</Text>
+                <Text style={styles.name} numberOfLines={1}>{item.partnerName}</Text>
                 <Text style={styles.date}>
                   {item.updatedAt ? item.updatedAt.toLocaleDateString() : ''}
                 </Text>
               </View>
               <View style={styles.row}>
-                <Text style={styles.message} numberOfLines={1}>{item.lastMessage}</Text>
-                
-                {/* ★ 未読バッジの表示 */}
+                <Text style={[styles.message, item.unreadCount > 0 && styles.unreadMessage]} numberOfLines={1}>
+                  {item.lastMessage || '画像を送信しました'}
+                </Text>
                 {item.unreadCount > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{item.unreadCount}</Text>
@@ -107,6 +109,7 @@ export default function ChatListScreen() {
         )}
         ListEmptyComponent={
           <View style={styles.center}>
+            <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 10 }} />
             <Text style={{color: '#888'}}>メッセージはまだありません</Text>
           </View>
         }
@@ -122,11 +125,10 @@ const styles = StyleSheet.create({
   avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#eee', marginRight: 12 },
   content: { flex: 1 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  name: { fontWeight: 'bold', fontSize: 16 },
+  name: { fontWeight: 'bold', fontSize: 16, color: '#333', maxWidth: '70%' },
   date: { fontSize: 12, color: '#999' },
-  message: { fontSize: 14, color: '#666', flex: 1 },
-  
-  // ★ バッジのスタイル
+  message: { fontSize: 14, color: '#666', flex: 1, marginRight: 8 },
+  unreadMessage: { color: '#333', fontWeight: 'bold' },
   badge: {
     backgroundColor: '#EF4444',
     borderRadius: 10,
@@ -135,11 +137,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
-    marginLeft: 8,
+    marginLeft: 'auto',
   },
-  badgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  }
+  badgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' }
 });

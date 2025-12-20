@@ -1,22 +1,13 @@
 import 'react-native-get-random-values';
 import { Stack } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
-
-// ★修正: 詳細ログ出力と、警告が出ない新しい設定
-Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    console.log("🔔 [Notification] 通知を受信しました (Handler Active)");
-    return {
-      shouldShowBanner: true, // ✅ iOS 14+ (Alertの代わり)
-      shouldShowList: true,   // ✅ 通知センターに表示
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-    };
-  },
-});
+import { useAuth } from '../src/features/auth/useAuth'; // パスは環境に合わせて調整してください
+import { usePushNotifications } from '../src/hooks/usePushNotifications'; // 修正したファイルのパス
 
 export default function RootLayout() {
+  const { user } = useAuth();
+
+
   useEffect(() => {
     console.log("🚀 [RootLayout] アプリが起動しました");
   }, []);
@@ -41,11 +32,11 @@ export default function RootLayout() {
         options={{ headerShown: false }} 
       />
 
-      {/* ★重要: DM機能のルート定義 */}
+      {/* DM機能 */}
       <Stack.Screen 
         name="dm" 
         options={{ 
-          headerShown: false // ヘッダーは dm/_layout.tsx に任せる
+          headerShown: false 
         }} 
       />
     </Stack>

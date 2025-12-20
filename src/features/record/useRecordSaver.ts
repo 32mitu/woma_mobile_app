@@ -24,32 +24,27 @@ export const useRecordSaver = () => {
       const { activities, weight, comment, imageUris, postToTimeline } = data;
       const uid = auth.currentUser.uid;
 
-      // 1. 画像アップロード処理 (複数対応)
+      // 1. 画像アップロード処理
       let uploadedImageUrls: string[] = [];
-      
       if (imageUris.length > 0) {
         const uploadPromises = imageUris.map(async (uri, index) => {
           const response = await fetch(uri);
           const blob = await response.blob();
-          
-          // ファイル名をユニークにする
           const filename = `records/${uid}/${Date.now()}_${index}.jpg`;
           const storageRef = ref(storage, filename);
-          
           await uploadBytes(storageRef, blob);
           return await getDownloadURL(storageRef);
         });
-
         uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
-      // 2. データのサニタイズ (undefined対策)
-      // Firestoreは undefined を受け付けないため、確実に値が入るように整形
+      // 2. データのサニタイズ
       const sanitizedActivities = activities.map(act => ({
         id: act.id,
         name: act.name || '名称不明',
         intensity: act.intensity || '中',
         duration: Number(act.duration) || 0,
+        steps: act.steps ? Number(act.steps) : 0, 
         mets: Number(act.mets) || 0,
         baseMets: {
           low: Number(act.baseMets?.low) || 0,
@@ -59,20 +54,32 @@ export const useRecordSaver = () => {
       }));
 
       // 3. 基本データの作成
+      // ★修正: HealthChartが参照するデータ形式に合わせる
       const recordData = {
-        uid, // セキュリティルールで必須
+        uid, 
+        userId: uid, // ★重要: グラフ側は 'userId' で検索しているため追加
         activities: sanitizedActivities,
         weight: weight ? Number(weight) : null,
         comment: comment || '',
-        imageUrls: uploadedImageUrls, // 配列として保存
-        imageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null, // 後方互換性
+        imageUrls: uploadedImageUrls,
+        imageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null,
         createdAt: serverTimestamp(),
       };
 
-      // 4. records コレクションに保存
-      const docRef = await addDoc(collection(db, 'records'), recordData);
+      // 4. 保存先の修正
+      // ★修正: 'records' → 'exerciseRecords' (グラフやログが参照しているコレクション)
+      const docRef = await addDoc(collection(db, 'exerciseRecords'), recordData);
 
-      // 5. タイムラインへの投稿 (ONの場合)
+      // ★追加: 体重グラフ用の別コレクションにも保存
+      if (weight) {
+        await addDoc(collection(db, 'healthRecords'), {
+          userId: uid,
+          weight: Number(weight),
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      // 5. タイムラインへの投稿
       if (postToTimeline) {
         await addDoc(collection(db, 'timeline'), {
           ...recordData,
@@ -82,11 +89,10 @@ export const useRecordSaver = () => {
           likes: 0,
           comments: 0,
           type: 'record',
-          imageUrls: uploadedImageUrls, 
+          // timeline側は userId でも uid でも表示できるように Timeline.tsx で吸収済み
         });
       }
 
-      // 完了後にホームへ戻る
       router.replace('/(tabs)/home');
 
     } catch (error) {

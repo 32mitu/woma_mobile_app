@@ -8,7 +8,7 @@ type Props = {
 };
 
 export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
-  // --- Web版の計算ロジックを移植 ---
+  // --- カロリー計算ロジック ---
   const calculateCalories = (records: any[], weight: number) => {
     if (!weight) return [];
 
@@ -23,10 +23,23 @@ export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
       // 新データ形式 (activities配列)
       if (record.activities && record.activities.length > 0) {
         record.activities.forEach((activity: any) => {
+          let durationHours = 0;
+
+          // 1. 時間(分)が入力されている場合
           if (activity.duration > 0) {
-            // METs値があれば使う、なければ0
-            const metValue = activity.mets || 0;
-            const durationHours = activity.duration / 60;
+            durationHours = activity.duration / 60;
+          } 
+          // 2. 時間は0だが、歩数(steps)がある場合 (★追加ロジック)
+          else if (activity.steps && activity.steps > 0) {
+            // 仮定: 1分 = 100歩 (6000歩 = 1時間) として時間を逆算
+            durationHours = activity.steps / 6000;
+          }
+
+          if (durationHours > 0) {
+            // METs値があれば使う、なければデフォルト3 (ウォーキング相当)
+            const metValue = activity.mets || 3;
+            
+            // カロリー計算式: METs * 時間 * 体重 * 1.05
             const calories = metValue * durationHours * weight * 1.05;
 
             const name = activity.name || '不明';
@@ -39,7 +52,6 @@ export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
         ['running', 'walking', 'training'].forEach(type => {
           if (record[type] && record[type].duration > 0) {
             const durationHours = record[type].duration / 60;
-            // intensityが日本語キーになっている前提
             const intensity = record[type].intensity || '中'; 
             const metValue = oldMets[type]?.[intensity] || 3;
             const calories = metValue * durationHours * weight * 1.05;
