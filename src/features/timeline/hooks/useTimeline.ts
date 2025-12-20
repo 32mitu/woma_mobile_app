@@ -6,13 +6,11 @@ import { useAuth } from '../../auth/useAuth';
 export const useTimeline = (groupId?: string) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userProfile } = useAuth(); // 自分のプロフィール（ブロックリスト含む）
+  const { userProfile } = useAuth();
 
   useEffect(() => {
-    // 1. ブロックリストの確認ログ
     const blockedUsers = userProfile?.blockedUsers || [];
-    console.log("🚫 [useTimeline] Current Block List:", blockedUsers);
-
+    
     let q;
     const timelineRef = collection(db, "timeline");
 
@@ -23,7 +21,7 @@ export const useTimeline = (groupId?: string) => {
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // 2. 全取得
+      // 1. データ取得
       const allPosts = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -33,13 +31,10 @@ export const useTimeline = (groupId?: string) => {
         };
       });
 
-      // 3. フィルタリング実行 & ログ確認
+      // 2. フィルタリング (IDの揺らぎを考慮)
       const filteredPosts = allPosts.filter(post => {
-        // 投稿にuserIdがない、またはブロックリストに含まれていなければ表示
-        const isBlocked = post.userId && blockedUsers.includes(post.userId);
-        if (isBlocked) {
-          console.log(`👻 [Filter] Hiding post ${post.id} from blocked user ${post.userId}`);
-        }
+        const targetUserId = post.userId || post.uid || post.authorId || post.senderId || post.user?._id;
+        const isBlocked = targetUserId && blockedUsers.includes(targetUserId);
         return !isBlocked;
       });
 
@@ -51,7 +46,7 @@ export const useTimeline = (groupId?: string) => {
     });
 
     return () => unsubscribe();
-  }, [groupId, userProfile?.blockedUsers]); // ★ここが重要: ブロックリストが変わったら再実行
+  }, [groupId, userProfile?.blockedUsers]);
 
   return { posts, loading };
 };

@@ -4,13 +4,16 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, update
 import { db, auth } from '../../../../firebaseConfig';
 import { timeAgo } from '../utils/timelineUtils';
 import { Ionicons } from '@expo/vector-icons';
+import { usePushNotifications } from '../../../hooks/usePushNotifications'; // ★追加
 
 type CommentSectionProps = {
   postId: string;
-  onCommentAdded?: () => void; // ★追加
+  postAuthorId?: string; // ★追加
+  onCommentAdded?: () => void;
 };
 
-export const CommentSection = ({ postId, onCommentAdded }: CommentSectionProps) => {
+export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: CommentSectionProps) => {
+  const { sendPushNotification } = usePushNotifications(); // ★追加
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState("");
@@ -37,11 +40,12 @@ export const CommentSection = ({ postId, onCommentAdded }: CommentSectionProps) 
       const user = auth.currentUser;
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const userData = userDoc.data();
+      const currentUserName = userData?.username || "匿名";
 
       await addDoc(collection(db, "timeline", postId, "comments"), {
         text: inputText.trim(),
         userId: user.uid,
-        username: userData?.username || "匿名",
+        username: currentUserName,
         userAvatar: userData?.profileImageUrl || null,
         createdAt: serverTimestamp(),
         likes: 0,
@@ -51,9 +55,18 @@ export const CommentSection = ({ postId, onCommentAdded }: CommentSectionProps) 
         comments: increment(1)
       });
 
+      // ★追加: ② コメント通知を送信 (自分自身の投稿でなければ)
+      if (postAuthorId && postAuthorId !== user.uid) {
+        sendPushNotification(
+          postAuthorId,
+          "新しいコメント",
+          `${currentUserName}さんがコメントしました: ${inputText.trim()}`,
+          { type: 'comment', postId: postId }
+        );
+      }
+
       setInputText("");
       
-      // ★追加: 親コンポーネントに通知して即座にカウントアップ
       if (onCommentAdded) {
         onCommentAdded();
       }
@@ -74,7 +87,6 @@ export const CommentSection = ({ postId, onCommentAdded }: CommentSectionProps) 
         <View key={item.id} style={styles.commentItem}>
           <Text style={styles.commentHeader}>
             <Text style={styles.username}>{item.username}</Text>
-            {/* 日付はサーバータイムスタンプなので、書き込み直後はnullの場合がある対策 */}
             <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : '今'}</Text>
           </Text>
           <Text style={styles.commentText}>{item.text}</Text>

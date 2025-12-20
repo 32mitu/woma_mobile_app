@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { 
   collection, addDoc, orderBy, query, onSnapshot, 
-  doc, setDoc, serverTimestamp, increment, getDoc 
+  doc, setDoc, serverTimestamp, increment, limit // ★ limitを追加
 } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../../firebaseConfig';
@@ -11,7 +11,7 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
 
-  // 1. ルームID作成 (UIDをソートして結合)
+  // 1. ルームID作成
   useEffect(() => {
     if (!currentUserId || !partnerUserId) return;
     const ids = [currentUserId, partnerUserId].sort();
@@ -23,12 +23,18 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
     if (!roomId) return;
 
     const messagesRef = collection(db, 'chatRooms', roomId, 'messages');
-    const q = query(messagesRef, orderBy('createdAt', 'desc'));
+    
+    // ★修正: 最新の50件だけを取得する制限 (limit) を追加
+    // これにより、メッセージが増えても読み込み速度が落ちなくなります
+    const q = query(
+      messagesRef, 
+      orderBy('createdAt', 'desc'), 
+      limit(50) 
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedMessages = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Firestore Timestamp を Date に変換
         const date = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
         
         return {
@@ -36,7 +42,7 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
           text: data.text || '',
           createdAt: date,
           user: data.user,
-          image: data.image || null, // 画像URLがあればセット
+          image: data.image || null,
         } as IMessage;
       });
       setMessages(fetchedMessages);
@@ -45,16 +51,15 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
     return () => unsubscribe();
   }, [roomId]);
 
-  // 共通: メッセージ送信の内部ロジック
+  // 送信ロジック
   const sendMessageRaw = async (text: string, imageUri: string | null, user: any) => {
     if (!roomId || !currentUserId || !partnerUserId) return;
 
     try {
       let downloadUrl = null;
 
-      // 画像がある場合はStorageにアップロード
       if (imageUri) {
-        // パス: chat-images/ルームID/タイムスタンプ.jpg
+        // 画像圧縮は呼び出し元(ChatRoomScreen)で行われている前提
         const filename = `chat-images/${roomId}/${Date.now()}.jpg`;
         const storageRef = ref(storage, filename);
         
@@ -65,10 +70,8 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
         downloadUrl = await getDownloadURL(storageRef);
       }
 
-      // 何も送るものがない場合は終了
       if (!text && !downloadUrl) return;
 
-      // メッセージデータの作成
       const msgData: any = {
         text: text,
         createdAt: serverTimestamp(),
@@ -85,10 +88,10 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
         msgData.image = downloadUrl;
       }
 
-      // (1) メッセージ追加
+      // メッセージ追加
       await addDoc(collection(db, 'chatRooms', roomId, 'messages'), msgData);
 
-      // (2) ルーム情報の更新 (一覧表示用)
+      // ルーム情報更新
       let lastMsgText = text;
       if (!text && downloadUrl) lastMsgText = '📷 画像を送信しました';
 
@@ -98,10 +101,8 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
         members: [currentUserId, partnerUserId].sort(),
         lastMessage: lastMsgText,
         updatedAt: serverTimestamp(),
-        // 相手の未読数をインクリメント
         [`unreadCounts.${partnerUserId}`]: increment(1),
-        
-        // 自分のメンバー情報を更新(キャッシュ)
+        // キャッシュ機能
         [`memberInfo.${currentUserId}`]: {
           name: user.name || 'Unknown',
           avatar: user.avatar || null
@@ -114,22 +115,18 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
     }
   };
 
-  // 3. テキスト送信 (GiftedChatのonSend用)
   const onSend = useCallback(async (newMessages: IMessage[] = []) => {
     if (newMessages.length === 0) return;
     const msg = newMessages[0];
     await sendMessageRaw(msg.text, null, msg.user);
   }, [roomId, currentUserId, partnerUserId]);
 
-  // 4. 画像送信 (UIから呼び出し用)
   const sendImage = useCallback(async (imageUri: string, user: any) => {
     await sendMessageRaw('', imageUri, user);
   }, [roomId, currentUserId, partnerUserId]);
 
-  // 5. 既読処理
   const markAsRead = useCallback(async () => {
     if (!roomId || !currentUserId) return;
-    // 自分の未読カウントを0にリセット
     const roomRef = doc(db, 'chatRooms', roomId);
     await setDoc(roomRef, {
       [`unreadCounts.${currentUserId}`]: 0

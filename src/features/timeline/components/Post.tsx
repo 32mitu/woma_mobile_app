@@ -4,13 +4,14 @@ import {
   Dimensions, ScrollView 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore'; // ★getDoc追加
+import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore'; 
 import { db } from '../../../../firebaseConfig';
 import { RenderTextWithHashtags, timeAgo } from '../utils/timelineUtils';
 import { CommentSection } from './CommentSection';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
 import { useSafety } from '../../../hooks/useSafety';
+import { usePushNotifications } from '../../../hooks/usePushNotifications'; // ★追加
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -23,7 +24,12 @@ type PostProps = {
     likes: number;
     comments?: number;
     timestamp: any;
-    activities?: { name: string; duration: number; mets?: number }[]; 
+    activities?: { 
+      name: string; 
+      duration: number; 
+      mets?: number;
+      steps?: number; 
+    }[]; 
   };
 };
 
@@ -31,17 +37,16 @@ export const Post = ({ post }: PostProps) => {
   const router = useRouter();
   const { userProfile } = useAuth();
   const { reportContent, blockUser } = useSafety();
+  const { sendPushNotification } = usePushNotifications(); // ★追加
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likes);
   const [showComments, setShowComments] = useState(false);
   const [activePage, setActivePage] = useState(0);
 
-  // ★追加: ユーザー情報のローカルステート
   const [authorName, setAuthorName] = useState("読み込み中...");
   const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
 
-  // ★追加: ユーザーIDをもとに、usersコレクションから最新情報を取得
   useEffect(() => {
     const fetchAuthorProfile = async () => {
       if (!post.userId) {
@@ -50,13 +55,11 @@ export const Post = ({ post }: PostProps) => {
       }
       
       try {
-        // プロフィール機能で使われている users コレクションを参照
         const userDocRef = doc(db, 'users', post.userId);
         const userDoc = await getDoc(userDocRef);
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          // DM/プロフィールと同じフィールド名を参照
           setAuthorName(data.username || data.displayName || "名無し");
           setAuthorAvatar(data.profileImageUrl || data.photoURL || null);
         } else {
@@ -87,6 +90,16 @@ export const Post = ({ post }: PostProps) => {
     try {
       if (newLiked) {
         await updateDoc(postRef, { likes: increment(1) });
+        
+        // ★追加: ① いいね通知を送信 (自分自身の投稿でなければ)
+        if (post.userId && post.userId !== userProfile.uid) {
+          sendPushNotification(
+            post.userId,
+            "いいねされました！",
+            `${userProfile.username || '誰か'}さんがあなたの投稿にいいねしました`,
+            { type: 'like', postId: post.id }
+          );
+        }
       } else {
         await updateDoc(postRef, { likes: increment(-1) });
       }
@@ -138,7 +151,6 @@ export const Post = ({ post }: PostProps) => {
 
   return (
     <View style={styles.card}>
-      {/* ヘッダー: 取得した最新のプロフィール情報を表示 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handlePressProfile} style={styles.userInfo}>
           {authorAvatar ? (
@@ -159,23 +171,23 @@ export const Post = ({ post }: PostProps) => {
         </TouchableOpacity>
       </View>
 
-      {/* アクティビティタグ */}
       {post.activities && post.activities.length > 0 && (
         <View style={styles.activityContainer}>
           {post.activities.map((act, index) => (
             <View key={index} style={styles.activityBadge}>
-              <Text style={styles.activityText}>🏃 {act.name} {act.duration}分</Text>
+              <Text style={styles.activityText}>
+                🏃 {act.name} {act.duration}分
+                {act.steps ? ` (${act.steps.toLocaleString()}歩)` : ''}
+              </Text>
             </View>
           ))}
         </View>
       )}
 
-      {/* 本文 */}
       <View style={styles.content}>
         <RenderTextWithHashtags text={post.text} />
       </View>
 
-      {/* 画像カルーセル */}
       {post.imageUrls && post.imageUrls.length > 0 && (
         <View style={styles.imageWrapper}>
           <ScrollView
@@ -212,7 +224,6 @@ export const Post = ({ post }: PostProps) => {
         </View>
       )}
 
-      {/* フッター */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
           <Ionicons 
@@ -237,131 +248,36 @@ export const Post = ({ post }: PostProps) => {
       </View>
 
       {showComments && (
-        <CommentSection postId={post.id} />
+        <CommentSection 
+          postId={post.id} 
+          postAuthorId={post.userId} // ★追加: 投稿者のIDを渡す
+        />
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: 'white',
-    marginBottom: 12,
-    paddingVertical: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: '#f3f4f6',
-  },
-  avatarPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  username: {
-    fontWeight: 'bold',
-    fontSize: 15,
-    color: '#1f2937',
-  },
-  date: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
-  moreButton: {
-    padding: 4,
-  },
-  content: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  activityContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    gap: 8,
-  },
-  activityBadge: {
-    backgroundColor: '#eff6ff',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-  },
-  activityText: {
-    fontSize: 12,
-    color: '#3b82f6',
-    fontWeight: '600',
-  },
-  imageWrapper: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH, 
-    marginBottom: 12,
-    position: 'relative',
-  },
-  imageScroll: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
-  },
-  postImage: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
-    backgroundColor: '#f3f4f6',
-  },
-  pagination: {
-    position: 'absolute',
-    bottom: 16,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    borderRadius: 3,
-  },
-  activeDot: {
-    width: 20,
-    height: 6,
-    backgroundColor: '#3b82f6',
-    borderRadius: 3,
-  },
-  inactiveDot: {
-    width: 6,
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  footer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    gap: 20,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionText: {
-    fontSize: 14,
-    color: '#4b5563',
-    fontWeight: '500',
-  },
+  card: { backgroundColor: 'white', marginBottom: 12, paddingVertical: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+  userInfo: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#f3f4f6' },
+  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  username: { fontWeight: 'bold', fontSize: 15, color: '#1f2937' },
+  date: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  moreButton: { padding: 4 },
+  content: { paddingHorizontal: 16, marginBottom: 12 },
+  activityContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, marginBottom: 8, gap: 8 },
+  activityBadge: { backgroundColor: '#eff6ff', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 16, borderWidth: 1, borderColor: '#dbeafe' },
+  activityText: { fontSize: 12, color: '#3b82f6', fontWeight: '600' },
+  imageWrapper: { width: SCREEN_WIDTH, height: SCREEN_WIDTH, marginBottom: 12, position: 'relative' },
+  imageScroll: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
+  postImage: { width: SCREEN_WIDTH, height: SCREEN_WIDTH, backgroundColor: '#f3f4f6' },
+  pagination: { position: 'absolute', bottom: 16, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  dot: { borderRadius: 3 },
+  activeDot: { width: 20, height: 6, backgroundColor: '#3b82f6', borderRadius: 3 },
+  inactiveDot: { width: 6, height: 6, backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+  footer: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6', gap: 20 },
+  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actionText: { fontSize: 14, color: '#4b5563', fontWeight: '500' },
 });

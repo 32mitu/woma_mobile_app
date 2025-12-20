@@ -1,8 +1,24 @@
 import { Stack } from 'expo-router';
-// useEffect と usePathname の import も不要になったので削除してOKですが、残しても害はありません
+import { useEffect } from 'react';
+import { LogBox } from 'react-native';
 
 export default function DMLayout() {
-  // ログ出力処理を全削除
+  
+  // ★追加: ライブラリ起因の特定のエラーログを無視する設定
+  useEffect(() => {
+    LogBox.ignoreLogs([
+      'A props object containing a "key" prop is being spread into JSX',
+    ]);
+    
+    // 念のためコンソールエラーも抑制（念入りな対策）
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('A props object containing a "key" prop')) {
+        return;
+      }
+      originalConsoleError(...args);
+    };
+  }, []);
 
   return (
     <Stack>

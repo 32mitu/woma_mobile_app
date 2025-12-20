@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, StyleSheet, Alert, TouchableOpacity, Text
-} from 'react-native';
+import { View, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { GiftedChat, Actions, IMessage } from 'react-native-gifted-chat';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { GiftedChat, Actions } from 'react-native-gifted-chat';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
@@ -20,13 +18,11 @@ export default function ChatRoomScreen() {
   const { userProfile } = useAuth();
   const navigation = useNavigation();
   
-  // hooks
   const { messages, onSend, sendImage, markAsRead } = useChat(userProfile?.uid, partnerId);
   const { reportContent, blockUser } = useSafety();
 
   const [partnerName, setPartnerName] = useState('チャット');
 
-  // 相手の名前を取得
   useEffect(() => {
     const fetchPartnerProfile = async () => {
       if (partnerId) {
@@ -43,42 +39,28 @@ export default function ChatRoomScreen() {
     fetchPartnerProfile();
   }, [partnerId]);
 
-  // ヘッダー設定 (通報・ブロックメニュー)
   useEffect(() => {
     navigation.setOptions({
       title: partnerName,
       headerRight: () => (
-        <TouchableOpacity 
-          onPress={showActionSheet} 
-          style={{ padding: 8 }}
-        >
+        <TouchableOpacity onPress={showActionSheet} style={{ padding: 8 }}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
         </TouchableOpacity>
       ),
     });
   }, [navigation, partnerName]);
 
-  // 画面表示時に既読にする
   useEffect(() => {
     markAsRead();
-  }, [messages.length]); // メッセージが増えるたびに既読チェック
+  }, [messages.length]);
 
-  // アクションシート表示
   const showActionSheet = () => {
     Alert.alert(
       'メニュー',
       '操作を選択してください',
       [
-        { 
-          text: 'このユーザーを通報', 
-          onPress: () => handleReport(),
-          style: 'destructive' 
-        },
-        { 
-          text: 'このユーザーをブロック', 
-          onPress: () => handleBlock(),
-          style: 'destructive' 
-        },
+        { text: 'このユーザーを通報', onPress: handleReport, style: 'destructive' },
+        { text: 'このユーザーをブロック', onPress: handleBlock, style: 'destructive' },
         { text: 'キャンセル', style: 'cancel' }
       ]
     );
@@ -86,24 +68,19 @@ export default function ChatRoomScreen() {
 
   const handleReport = async () => {
     if (!partnerId) return;
-    await reportContent('user' as const, partnerId, '不適切なDM');
-    Alert.alert('完了', '通報を受け付けました。');
+    await reportContent(partnerId, 'user', '不適切なDM');
   };
 
   const handleBlock = async () => {
     if (!partnerId) return;
     await blockUser(partnerId);
-    Alert.alert('完了', 'ユーザーをブロックしました。');
-    navigation.goBack();
+    navigation.goBack(); 
   };
 
-  // ★画像選択処理
   const handlePickImage = useCallback(async () => {
     if (!userProfile) return;
-
-    // 権限確認 (必要に応じて)
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permission.granted === false) {
+    if (!permission.granted) {
       Alert.alert('エラー', '写真へのアクセス許可が必要です');
       return;
     }
@@ -111,43 +88,30 @@ export default function ChatRoomScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.7,
+      quality: 0.5, // 圧縮だけはしておくと標準Imageでも少し軽くなります
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      const uri = result.assets[0].uri;
-      
-      // 送信実行
       const user = {
         _id: userProfile.uid,
         name: userProfile.username,
         avatar: userProfile.profileImageUrl
       };
-      await sendImage(uri, user);
+      await sendImage(result.assets[0].uri, user);
     }
   }, [userProfile, sendImage]);
 
-  // ★入力欄左側の「＋」ボタン描画
   const renderActions = useCallback((props: any) => {
     return (
       <Actions
         {...props}
-        containerStyle={{
-          width: 44,
-          height: 44,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 0,
-        }}
-        icon={() => (
-          <Ionicons name="image" size={28} color="#3B82F6" />
-        )}
+        containerStyle={styles.actionContainer}
+        icon={() => <Ionicons name="image" size={28} color="#3B82F6" />}
         onPressActionButton={handlePickImage}
       />
     );
   }, [handlePickImage]);
 
-  // ユーザー情報オブジェクト (GiftedChat用)
   const currentUser = {
     _id: userProfile?.uid || '',
     name: userProfile?.username || '自分',
@@ -162,21 +126,16 @@ export default function ChatRoomScreen() {
         user={currentUser}
         renderUsernameOnMessage={false}
         alwaysShowSend
-        renderActions={renderActions} // 画像ボタンを追加
+        renderActions={renderActions}
         placeholder="メッセージを入力..."
-        textInputProps={{
-          style: styles.textInput
-        }}
+        textInputProps={{ style: styles.textInput }}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#fff' 
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
   textInput: {
     backgroundColor: '#F3F4F6',
     borderRadius: 20,
@@ -189,4 +148,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  actionContainer: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
+  }
 });

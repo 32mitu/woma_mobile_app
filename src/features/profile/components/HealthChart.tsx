@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { BarChart } from "react-native-gifted-charts";
 import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 
 type Props = {
   userId: string;
@@ -22,7 +23,6 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
   const [minWeightAxis, setMinWeightAxis] = useState(0);
   const [maxWeightAxis, setMaxWeightAxis] = useState(100);
 
-  // ツールチップ用データ
   const [rawWeights, setRawWeights] = useState<(number | null)[]>([]);
 
   const getMonthRange = (date: Date) => {
@@ -34,6 +34,7 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
 
   const fetchData = async () => {
     setLoading(true);
+    
     const { start, end } = getMonthRange(currentDate);
     const daysInMonth = end.getDate();
 
@@ -45,9 +46,10 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         where('createdAt', '>=', Timestamp.fromDate(start)),
         where('createdAt', '<=', Timestamp.fromDate(end))
       );
-      const exerciseSnap = await getDocs(exerciseQ);
       
+      const exerciseSnap = await getDocs(exerciseQ);
       const dailyCalories = new Array(daysInMonth).fill(0);
+      
       exerciseSnap.docs.forEach(doc => {
         const data = doc.data();
         const date = data.createdAt.toDate();
@@ -56,9 +58,12 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         let total = 0;
         if (data.activities) {
           data.activities.forEach((act: any) => {
-            const mets = act.mets || 3;
-            const w = data.weight || userWeight || 60;
-            total += mets * w * (act.duration / 60) * 1.05;
+            const mets = Number(act.mets) || 3;
+            const w = Number(data.weight) || userWeight || 60;
+            let durationHours = 0;
+            if (Number(act.duration) > 0) durationHours = Number(act.duration) / 60;
+            else if (Number(act.steps) > 0) durationHours = Number(act.steps) / 6000;
+            if (durationHours > 0) total += mets * w * durationHours * 1.05;
           });
         }
         dailyCalories[idx] += total;
@@ -72,6 +77,7 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         where('createdAt', '<=', Timestamp.fromDate(end)),
         orderBy('createdAt', 'asc')
       );
+      
       const weightSnap = await getDocs(weightQ);
       const dailyWeights = new Array(daysInMonth).fill(null);
       weightSnap.docs.forEach(doc => {
@@ -80,49 +86,56 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         dailyWeights[idx] = d.weight;
       });
 
-      // 体重の穴埋め (線が0に落ちないようにする)
+      // 体重の穴埋め
       let lastW = userWeight || 60;
-      
-      // データがない日も前回の体重で埋めて、線を平らに維持する
       for(let i=0; i<daysInMonth; i++) {
-        if (dailyWeights[i] !== null) {
-            lastW = dailyWeights[i];
-        } else {
-            dailyWeights[i] = lastW;
-        }
+        if (dailyWeights[i] !== null) lastW = dailyWeights[i];
+        else dailyWeights[i] = lastW;
       }
       setRawWeights(dailyWeights);
 
-      // 3. スケール計算
+      // --- 3. 自動スケール計算 ---
+
+      // A. カロリーの最大値計算
       let localMaxCal = Math.max(...dailyCalories);
       if (localMaxCal < 500) localMaxCal = 500;
       localMaxCal = Math.ceil(localMaxCal / 100) * 100;
 
+      // B. 体重の軸計算 (基準体重 ± 5kg に変更)
       const validWeights = dailyWeights.filter(w => w !== null) as number[];
-      let localMinW = 0;
-      let localMaxW = 100;
-
+      
+      // 基準とする体重
+      let baseWeight = userWeight || 60;
       if (validWeights.length > 0) {
-          const minVal = Math.min(...validWeights);
-          const maxVal = Math.max(...validWeights);
-          
-          const padding = 2; 
-          localMinW = Math.floor(minVal) - padding;
-          localMaxW = Math.ceil(maxVal) + padding;
-          
-          if (localMinW < 0) localMinW = 0;
-          if (localMaxW - localMinW < 5) {
-              localMaxW = localMinW + 5;
-          }
-      } else {
-           const base = userWeight || 60;
-           localMinW = Math.max(0, base - 5);
-           localMaxW = base + 5;
+        const sum = validWeights.reduce((a, b) => a + b, 0);
+        baseWeight = sum / validWeights.length;
+      }
+
+      // ★修正: デフォルト範囲を ±5kg に狭めて変化を見やすくする
+      let calcMinW = Math.floor(baseWeight - 5);
+      let calcMaxW = Math.ceil(baseWeight + 5);
+
+      // 実際のデータが範囲を超えていたら広げる
+      if (validWeights.length > 0) {
+        const dataMin = Math.min(...validWeights);
+        const dataMax = Math.max(...validWeights);
+        if (dataMin < calcMinW) calcMinW = Math.floor(dataMin - 1);
+        if (dataMax > calcMaxW) calcMaxW = Math.ceil(dataMax + 1);
+      }
+
+      // キリの良い数字 (5の倍数) に丸める
+      calcMinW = Math.floor(calcMinW / 5) * 5;
+      calcMaxW = Math.ceil(calcMaxW / 5) * 5;
+      
+      // 範囲が狭すぎないように調整 (最低でも10kg幅は確保して見やすくする)
+      // 例: 55kg〜65kg
+      if (calcMaxW - calcMinW < 10) {
+        calcMaxW = calcMinW + 10;
       }
 
       setMaxCalorie(localMaxCal);
-      setMinWeightAxis(localMinW);
-      setMaxWeightAxis(localMaxW);
+      setMinWeightAxis(calcMinW);
+      setMaxWeightAxis(calcMaxW);
 
       // 4. データ変換
       const formattedBarData = dailyCalories.map((cal, i) => ({
@@ -133,13 +146,14 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
         labelTextStyle: { color: '#999', fontSize: 10, width: 20, textAlign: 'center' } 
       }));
 
-      const weightRange = localMaxW - localMinW;
+      // 体重データを正規化
+      const weightRange = calcMaxW - calcMinW;
       const formattedLineData = dailyWeights.map((w, i) => {
         if (w === null) return { value: 0, hideDataPoint: true };
         
         let scaledValue = 0;
         if (weightRange > 0) {
-            scaledValue = ((w - localMinW) / weightRange) * localMaxCal;
+            scaledValue = ((w - calcMinW) / weightRange) * localMaxCal;
         }
         
         return {
@@ -154,15 +168,17 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
       setLineData(formattedLineData);
 
     } catch (e) {
-      console.error(e);
+      console.error("[HealthChart] Error fetching data:", e);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [userId, currentDate, refreshTrigger]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [userId, currentDate, refreshTrigger])
+  );
 
   const changeMonth = (offset: number) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
@@ -179,7 +195,7 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
     }
     
     return (
-      <View style={styles.rightAxisContainer}>
+      <View style={styles.rightAxisAbsContainer}>
         {labels.reverse().map((val, i) => (
           <Text key={i} style={styles.rightAxisText}>{val}</Text>
         ))}
@@ -203,10 +219,8 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
     );
   };
 
-  // 画面幅
   const screenWidth = Dimensions.get('window').width;
-  // グラフの幅を計算: 画面幅 - (コンテナ左右パディング32 + 右軸幅50 + 予備マージン20)
-  const chartWidth = screenWidth - 110;
+  const chartWidth = screenWidth - 100; 
 
   return (
     <View style={styles.container}>
@@ -230,8 +244,7 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
       {loading ? (
         <ActivityIndicator color="#3B82F6" style={{ height: 220 }} />
       ) : (
-        <View style={styles.chartRow}>
-            {/* メイングラフ */}
+        <View style={[styles.chartRow, { paddingRight: 40 }]}>
             <BarChart
                 data={barData}
                 barWidth={6}
@@ -262,10 +275,10 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
                 }}
                 
                 height={200}
-                width={chartWidth} // 計算した幅を適用
+                width={chartWidth}
                 isAnimated
             />
-            {/* 右軸 (固定幅) */}
+            {/* 右軸 (絶対配置) */}
             <RightYAxis />
         </View>
       )}
@@ -295,25 +308,27 @@ const styles = StyleSheet.create({
   rightAxisTitle: { fontSize: 10, color: '#36A2EB', fontWeight: 'bold' },
 
   chartRow: { 
+    position: 'relative',
     flexDirection: 'row', 
     alignItems: 'flex-start',
-    // グラフと軸がはみ出さないようにラップ
-    overflow: 'hidden', 
   },
   
-  rightAxisContainer: {
+  rightAxisAbsContainer: {
+    position: 'absolute',
+    right: 0,
+    top: -6,
+    bottom: 20, 
     height: 200, 
-    justifyContent: 'space-between',
-    marginLeft: 4,
-    width: 50, // 固定幅を確保
+    justifyContent: 'space-between', 
+    alignItems: 'flex-end',
+    width: 40,
   },
   rightAxisText: {
-    fontSize: 9, 
-    color: '#36A2EB',
+    fontSize: 10, 
+    color: '#36A2EB', 
     fontWeight: 'bold',
     textAlign: 'right',
-    width: '100%',
-    transform: [{ translateY: -5 }] 
+    backgroundColor: 'rgba(255,255,255,0.8)' 
   },
   tooltipContainer: {
     backgroundColor: 'rgba(0,0,0,0.8)',
