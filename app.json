@@ -60,6 +60,12 @@
         {
           "ios": {
             "useFrameworks": "static"
+          },
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "minSdkVersion": 26,
+            "buildToolsVersion": "35.0.0"
           }
         }
       ],
@@ -69,6 +75,19 @@
           "isVitalsEnabled": false,
           "isSleepEnabled": false,
           "isWorkoutEnabled": false
+        }
+      ],
+      [
+        "react-native-health-connect",
+        {
+          "rationaleActivityHeader": "歩数データの利用",
+          "rationaleActivityDescription": "WOMAは、日々の運動を記録するためにHealth Connectへのアクセス許可が必要です。",
+          "permissions": [
+            {
+              "accessType": "read",
+              "recordType": "Steps"
+            }
+          ]
         }
       ]
     ],
