@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
+    "eas-build-pre-install": "node -e \"if(process.env.GOOGLE_SERVICES_JSON) require('fs').writeFileSync('google-services.json', process.env.GOOGLE_SERVICES_JSON)\"",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
