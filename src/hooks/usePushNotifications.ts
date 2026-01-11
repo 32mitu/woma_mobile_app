@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore'; 
+import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 
@@ -31,7 +31,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
       if (userId && token) {
         saveTokenToFirestore(userId, token);
         // リマインダー設定（重複チェック付き）
-        scheduleDailyReminder(); 
+        scheduleDailyReminder();
       }
     });
 
@@ -44,7 +44,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
       if (data?.type === 'dm' && data?.partnerId) {
         router.push(`/dm/${data.partnerId}`);
       } else if (data?.type === 'like' || data?.type === 'comment') {
-        router.push('/(tabs)/home'); 
+        router.push('/(tabs)/home');
       }
     });
 
@@ -63,38 +63,72 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     }
   };
 
-  // ★修正箇所: 重複チェックを追加して安定化
+  // ★修正箇所: 複数回のリマインダー（08:05, 08:10, 21:00）を設定
   const scheduleDailyReminder = async () => {
     try {
       // 1. 現在セットされている通知をすべて確認
       const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-      
+
       // 2. すでに「reminder」タイプの通知があるか探す
-      const hasReminder = scheduledNotifications.find(
+      const existingReminders = scheduledNotifications.filter(
         (n) => n.content.data?.type === 'reminder'
       );
 
-      // 3. すでにセットされていたら「何もしない」で終了（これが重要！）
-      if (hasReminder) {
-        console.log("📅 [Notification] リマインダーは既にセットされています");
+      // 3. すでに3件セットされていたら「何もしない」で終了（簡易チェック）
+      if (existingReminders.length === 3) {
+        console.log("📅 [Notification] リマインダーは既に2件設定済みです");
         return;
       }
 
-      // 4. まだセットされていなければセットする
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "今日の記録は済みましたか？",
-          body: "21時になりました。今日の活動を記録して、自分を褒めましょう！",
-          sound: 'default',
-          data: { type: 'reminder' }, // 識別用のタグ
-        },
-        trigger: {
+      // 4. 数が合わない場合は、一旦reminder系をすべて削除して再登録
+      console.log(`📅 [Notification] リマインダー設定を更新します（現在: ${existingReminders.length}件）...`);
+      for (const reminder of existingReminders) {
+        await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
+      }
+
+      // 5. 設定するスケジュールのリスト
+      const schedules = [
+        {
           hour: 21,
           minute: 0,
-          repeats: true, // 毎日繰り返す
+          title: "今日の記録は済みましたか？",
+          body: "21時になりました。今日の活動を記録して、自分を褒めましょう！",
         },
+      ];
+
+      // 6. ループで登録
+      for (const s of schedules) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: s.title,
+            body: s.body,
+            sound: 'default',
+            data: { type: 'reminder' }, // 識別用のタグ
+            channelId: 'default', // ★Androidで必須
+          } as any,
+          trigger: {
+            hour: s.hour,
+            minute: s.minute,
+            repeats: true, // 毎日繰り返す
+          },
+        });
+      }
+
+      // ★テスト用: 10秒後に通知を出す（動作確認用）
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🔔 テスト通知",
+          body: "これが届けば通知機能は正常です！",
+          sound: 'default',
+          channelId: 'default',
+        } as any,
+        trigger: {
+          seconds: 10,
+        } as any,
       });
-      console.log("📅 [Notification] 新しく21:00のリマインダーをセットしました");
+      console.log("📅 [Notification] テスト通知を10秒後にセットしました");
+
+      console.log("📅 [Notification] 21:00 のリマインダーをセットしました");
 
     } catch (error) {
       console.error("Failed to schedule reminder:", error);
@@ -105,7 +139,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     try {
       const userDoc = await getDoc(doc(db, "users", targetUserId));
       if (!userDoc.exists()) return;
-      
+
       const userData = userDoc.data();
       const tokens = userData.fcmTokens || [];
 
