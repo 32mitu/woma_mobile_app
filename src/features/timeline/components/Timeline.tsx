@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, FlatList, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Post } from './Post';
 import { useTimeline } from '../hooks/useTimeline';
 
@@ -31,29 +32,30 @@ export const Timeline = ({ groupId }: Props) => {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlashList
         data={posts}
         scrollEnabled={!groupId}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        estimatedItemSize={400} // 平均的な投稿の高さ
         renderItem={({ item }) => {
           // 投稿データ内のIDフィールドの揺らぎを吸収
           const targetUserId = item.userId || item.uid || item.authorId || item.senderId || item.user?._id;
 
           return (
-            <Post 
+            <Post
               post={{
                 id: item.id,
                 userId: targetUserId, // ★最重要: ユーザーIDさえあれば復元可能
-                
+
                 // 念のため投稿データ内の情報も渡すが、Post側で上書き取得する
                 text: item.text || item.comment || "",
                 imageUrls: item.imageUrls || (item.imageUrl ? [item.imageUrl] : []),
-                
+
                 likes: item.likes || 0,
                 comments: item.comments || 0,
                 timestamp: item.createdAt,
-                activities: item.activities || [], 
+                activities: item.activities || [],
               }}
             />
           );
@@ -75,7 +77,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   listContent: {
-    paddingBottom: 80, 
+    paddingBottom: 80,
   },
   emptyText: {
     fontSize: 16,

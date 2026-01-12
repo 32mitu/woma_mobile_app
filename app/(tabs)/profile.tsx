@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, SafeAreaView, Alert, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, Alert, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 // deleteAccount を追加で取得
 import { useAuth } from '../../src/features/auth/useAuth';
@@ -15,15 +16,15 @@ export default function ProfileScreen() {
   const router = useRouter();
   // ★ deleteAccount をここで取得
   const { userProfile, signOut, deleteAccount } = useAuth();
-  
+
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(new Date()); 
+  const [lastUpdate, setLastUpdate] = useState(new Date());
   const [isDeleting, setIsDeleting] = useState(false); // 削除処理中のフラグ
 
   // 引っ張って更新
   const onRefresh = async () => {
     setRefreshing(true);
-    setLastUpdate(new Date()); 
+    setLastUpdate(new Date());
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -31,12 +32,12 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     Alert.alert("ログアウト", "本当にログアウトしますか？", [
       { text: "キャンセル", style: "cancel" },
-      { 
-        text: "ログアウト", 
+      {
+        text: "ログアウト",
         style: "destructive",
         onPress: async () => {
-          await signOut(); 
-          router.replace('/'); 
+          await signOut();
+          router.replace('/');
         }
       }
     ]);
@@ -49,8 +50,8 @@ export default function ProfileScreen() {
       "この操作は取り消せません。\n全てのデータ（記録、投稿、設定）が永久に削除されます。\n本当に実行しますか？",
       [
         { text: "キャンセル", style: "cancel" },
-        { 
-          text: "削除する", 
+        {
+          text: "削除する",
           style: "destructive",
           onPress: async () => {
             performDelete();
@@ -75,11 +76,11 @@ export default function ProfileScreen() {
   };
 
   if (!userProfile) {
-    return <View style={styles.container} />; 
+    return <View style={styles.container} />;
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -87,16 +88,16 @@ export default function ProfileScreen() {
         }
       >
         {/* 1. ヘッダー (ログアウトボタン含む) */}
-        <ProfileHeader 
-          userProfile={userProfile} 
-          onLogout={handleLogout} 
+        <ProfileHeader
+          userProfile={userProfile}
+          onLogout={handleLogout}
         />
 
         {/* 2. 健康・カロリー分析 */}
         {userProfile.weight ? (
-          <HealthChart 
-            userId={userProfile.uid} 
-            userWeight={userProfile.weight} 
+          <HealthChart
+            userId={userProfile.uid}
+            userWeight={userProfile.weight}
             refreshTrigger={lastUpdate}
           />
         ) : (
@@ -112,12 +113,12 @@ export default function ProfileScreen() {
 
         {/* 4. 最近の活動ログ */}
         <ActivityLog userId={userProfile.uid} />
-        
+
         {/* 5. ★追加: アカウント削除エリア (Danger Zone) */}
         <View style={styles.dangerZone}>
           <Text style={styles.dangerTitle}>アカウント管理</Text>
-          <TouchableOpacity 
-            style={[styles.deleteButton, isDeleting && styles.disabledButton]} 
+          <TouchableOpacity
+            style={[styles.deleteButton, isDeleting && styles.disabledButton]}
             onPress={handleDeleteAccount}
             disabled={isDeleting}
           >
@@ -131,7 +132,7 @@ export default function ProfileScreen() {
             )}
           </TouchableOpacity>
         </View>
-        
+
         {/* 下部の余白 */}
         <View style={{ height: 40 }} />
       </ScrollView>

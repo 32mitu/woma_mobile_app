@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, ActivityIndicator, FlatList, Keyboard } from 'react-native';
+import { View, TextInput, StyleSheet, TouchableOpacity, Text, ActivityIndicator, Keyboard } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
@@ -13,7 +14,7 @@ type SearchType = 'user' | 'tag';
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  
+
   // URLパラメータがあれば初期値を設定 (例: #タグタップ時)
   const initialType = (params.type as SearchType) || 'user';
   const initialQuery = (params.q as string) || '';
@@ -44,7 +45,7 @@ export default function SearchScreen() {
         // 前方一致検索 (text ~ text + '\uf8ff') を使うのが一般的ですが、今回は取得してフィルタする方式を維持
         const q = query(usersRef, limit(50));
         const snapshot = await getDocs(q);
-        
+
         const searchLower = text.toLowerCase();
         const filteredUsers = snapshot.docs
           .map(doc => ({ uid: doc.id, ...doc.data() } as any))
@@ -53,14 +54,14 @@ export default function SearchScreen() {
             const display = user.displayName?.toLowerCase() || '';
             return name.includes(searchLower) || display.includes(searchLower);
           });
-          
+
         setResults(filteredUsers);
 
       } else {
         // --- タグ検索 (Web版 TagPage.jsx の移植) ---
         // 入力値に#がなければ付与する
         const tag = text.trim().startsWith('#') ? text.trim() : `#${text.trim()}`;
-        
+
         const timelineRef = collection(db, 'timeline');
         const q = query(
           timelineRef,
@@ -76,7 +77,7 @@ export default function SearchScreen() {
           // Timestamp変換はPostコンポーネント内で行うためそのまま渡すか、ここで整形
           timestamp: doc.data().createdAt
         }));
-        
+
         setResults(posts);
       }
 
@@ -94,7 +95,7 @@ export default function SearchScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <FontAwesome5 name="arrow-left" size={20} color="#333" />
         </TouchableOpacity>
-        
+
         <View style={styles.searchBar}>
           <FontAwesome5 name="search" size={16} color="#999" style={styles.searchIcon} />
           <TextInput
@@ -116,14 +117,14 @@ export default function SearchScreen() {
 
       {/* タブ切り替え */}
       <View style={styles.tabs}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'user' && styles.activeTab]} 
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'user' && styles.activeTab]}
           onPress={() => { setActiveTab('user'); setResults([]); }}
         >
           <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>ユーザー</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'tag' && styles.activeTab]} 
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'tag' && styles.activeTab]}
           onPress={() => { setActiveTab('tag'); setResults([]); }}
         >
           <Text style={[styles.tabText, activeTab === 'tag' && styles.activeTabText]}>ハッシュタグ</Text>
@@ -138,8 +139,9 @@ export default function SearchScreen() {
           {activeTab === 'user' ? (
             <UserList users={results} />
           ) : (
-            <FlatList
+            <FlashList
               data={results}
+              estimatedItemSize={200}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => <Post post={item} />} // Postコンポーネントを再利用
               contentContainerStyle={{ padding: 16 }}
@@ -178,7 +180,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 8 },
   input: { flex: 1, fontSize: 16, color: '#333' },
-  
+
   tabs: {
     flexDirection: 'row',
     backgroundColor: 'white',
@@ -196,7 +198,7 @@ const styles = StyleSheet.create({
   },
   tabText: { color: '#666', fontWeight: '600' },
   activeTabText: { color: '#3B82F6' },
-  
+
   content: { flex: 1 },
   emptyText: { textAlign: 'center', marginTop: 20, color: '#888' },
 });

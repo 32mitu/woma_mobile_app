@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons'; // Ioniconsを追加
 import { useSocialCounts } from '../../social/hooks/useSocial';
@@ -21,20 +22,23 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
         <Image
           source={{ uri: userProfile.profileImageUrl || userProfile.photoURL || 'https://via.placeholder.com/100' }}
           style={styles.avatar}
+          contentFit="cover"
+          transition={1000}
+          cachePolicy="memory-disk"
         />
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>
             {userProfile.username || userProfile.displayName || '名無しさん'}
           </Text>
           {/* ★追加: 編集ボタン */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.editButton}
             onPress={() => router.push('/profile/edit')}
           >
             <Text style={styles.editButtonText}>プロフィール編集</Text>
           </TouchableOpacity>
         </View>
-        
+
         <TouchableOpacity onPress={onLogout} style={styles.logoutButton}>
           <FontAwesome5 name="sign-out-alt" size={20} color="#9CA3AF" />
         </TouchableOpacity>
@@ -47,7 +51,7 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
       {/* 以下、既存の統計表示コード... */}
       <View style={styles.statsContainer}>
         {/* ... (省略) ... */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.statItem}
           onPress={() => router.push({ pathname: '/friends', params: { type: 'following' } })}
         >
@@ -55,7 +59,7 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
           <Text style={styles.statLabel}>フォロー中</Text>
         </TouchableOpacity>
         <View style={styles.statDivider} />
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.statItem}
           onPress={() => router.push({ pathname: '/friends', params: { type: 'followers' } })}
         >
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
   topSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#eee', marginRight: 16 },
   name: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  
+
   // ★追加: 編集ボタンのスタイル
   editButton: {
     backgroundColor: '#EFF6FF', paddingVertical: 6, paddingHorizontal: 12,

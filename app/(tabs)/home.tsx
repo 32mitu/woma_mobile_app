@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,7 +13,7 @@ import { useUnreadCount } from '../../src/features/dm/hooks/useUnreadCount';
 export default function HomeScreen() {
   const router = useRouter();
   const { userProfile } = useAuth();
-  
+
   const { scheduleDailyReminder } = usePushNotifications(userProfile?.uid);
   const { dailySteps, isAvailable } = useHealthKit();
   const unreadCount = useUnreadCount();
@@ -24,10 +25,10 @@ export default function HomeScreen() {
   }, [userProfile]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>WOMA</Text>
-        
+
         <View style={styles.headerRight}>
           <TouchableOpacity onPress={() => router.push('/groups')} style={styles.iconButton}>
             <Ionicons name="people" size={24} color="#333" />
@@ -43,7 +44,7 @@ export default function HomeScreen() {
               </View>
             )}
           </TouchableOpacity>
-          
+
           <TouchableOpacity onPress={() => router.push('/search')} style={styles.iconButton}>
             <Ionicons name="search" size={24} color="#333" />
           </TouchableOpacity>
@@ -61,8 +62,8 @@ export default function HomeScreen() {
               <Text style={styles.stepCount}>{dailySteps.toLocaleString()} 歩</Text>
             </View>
           </View>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.recordButton}
             onPress={() => {
               Alert.alert("えらい！", "その調子で記録して、みんなに自慢しましょう！");
@@ -100,13 +101,13 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12, 
+    gap: 12,
   },
   iconButton: {
     padding: 8,
     backgroundColor: '#F3F4F6',
     borderRadius: 20,
-    position: 'relative', 
+    position: 'relative',
   },
   badge: {
     position: 'absolute',

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, Image, TouchableOpacity, StyleSheet, Alert, 
-  Dimensions, ScrollView 
+import {
+  View, Text, TouchableOpacity, StyleSheet, Alert,
+  Dimensions, ScrollView
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore'; 
+import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { RenderTextWithHashtags, timeAgo } from '../utils/timelineUtils';
 import { CommentSection } from './CommentSection';
@@ -24,12 +25,12 @@ type PostProps = {
     likes: number;
     comments?: number;
     timestamp: any;
-    activities?: { 
-      name: string; 
-      duration: number; 
+    activities?: {
+      name: string;
+      duration: number;
       mets?: number;
-      steps?: number; 
-    }[]; 
+      steps?: number;
+    }[];
   };
 };
 
@@ -53,7 +54,7 @@ export const Post = ({ post }: PostProps) => {
         setAuthorName("不明なユーザー");
         return;
       }
-      
+
       try {
         const userDocRef = doc(db, 'users', post.userId);
         const userDoc = await getDoc(userDocRef);
@@ -90,7 +91,7 @@ export const Post = ({ post }: PostProps) => {
     try {
       if (newLiked) {
         await updateDoc(postRef, { likes: increment(1) });
-        
+
         // ★追加: ① いいね通知を送信 (自分自身の投稿でなければ)
         if (post.userId && post.userId !== userProfile.uid) {
           sendPushNotification(
@@ -112,12 +113,12 @@ export const Post = ({ post }: PostProps) => {
   const handleOptions = () => {
     if (!userProfile) return;
     const isMyPost = userProfile.uid === post.userId;
-    const options = isMyPost 
-      ? [{ text: '削除する', style: 'destructive', onPress: handleDelete }] 
+    const options = isMyPost
+      ? [{ text: '削除する', style: 'destructive', onPress: handleDelete }]
       : [
-          { text: '通報する', style: 'destructive', onPress: () => handleReport() },
-          { text: 'ブロックする', style: 'destructive', onPress: () => handleBlock() }
-        ];
+        { text: '通報する', style: 'destructive', onPress: () => handleReport() },
+        { text: 'ブロックする', style: 'destructive', onPress: () => handleBlock() }
+      ];
 
     Alert.alert('メニュー', '', [...options as any, { text: 'キャンセル', style: 'cancel' }]);
   };
@@ -154,7 +155,12 @@ export const Post = ({ post }: PostProps) => {
       <View style={styles.header}>
         <TouchableOpacity onPress={handlePressProfile} style={styles.userInfo}>
           {authorAvatar ? (
-            <Image source={{ uri: authorAvatar }} style={styles.avatar} />
+            <Image
+              source={{ uri: authorAvatar }}
+              style={styles.avatar}
+              contentFit="cover"
+              transition={500}
+            />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
               <Ionicons name="person" size={20} color="#9ca3af" />
@@ -165,7 +171,7 @@ export const Post = ({ post }: PostProps) => {
             <Text style={styles.date}>{timeAgo(post.timestamp)}</Text>
           </View>
         </TouchableOpacity>
-        
+
         <TouchableOpacity onPress={handleOptions} style={styles.moreButton}>
           <Ionicons name="ellipsis-horizontal" size={20} color="#9ca3af" />
         </TouchableOpacity>
@@ -199,24 +205,26 @@ export const Post = ({ post }: PostProps) => {
             style={styles.imageScroll}
           >
             {post.imageUrls.map((url, index) => (
-              <Image 
-                key={index} 
-                source={{ uri: url }} 
-                style={styles.postImage} 
-                resizeMode="cover" 
+              <Image
+                key={index}
+                source={{ uri: url }}
+                style={styles.postImage}
+                contentFit="cover"
+                transition={500}
+                cachePolicy="memory-disk"
               />
             ))}
           </ScrollView>
-          
+
           {post.imageUrls.length > 1 && (
             <View style={styles.pagination}>
               {post.imageUrls.map((_, index) => (
-                <View 
-                  key={index} 
+                <View
+                  key={index}
                   style={[
-                    styles.dot, 
+                    styles.dot,
                     index === activePage ? styles.activeDot : styles.inactiveDot
-                  ]} 
+                  ]}
                 />
               ))}
             </View>
@@ -226,18 +234,18 @@ export const Post = ({ post }: PostProps) => {
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-          <Ionicons 
-            name={liked ? "heart" : "heart-outline"} 
-            size={24} 
-            color={liked ? "#ef4444" : "#4b5563"} 
+          <Ionicons
+            name={liked ? "heart" : "heart-outline"}
+            size={24}
+            color={liked ? "#ef4444" : "#4b5563"}
           />
           <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>
             {likeCount > 0 ? likeCount : 'えらい！'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton} 
+        <TouchableOpacity
+          style={styles.actionButton}
           onPress={() => setShowComments(!showComments)}
         >
           <Ionicons name="chatbubble-outline" size={22} color="#4b5563" />
@@ -248,8 +256,8 @@ export const Post = ({ post }: PostProps) => {
       </View>
 
       {showComments && (
-        <CommentSection 
-          postId={post.id} 
+        <CommentSection
+          postId={post.id}
           postAuthorId={post.userId} // ★追加: 投稿者のIDを渡す
         />
       )}
