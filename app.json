@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/home_icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -63,10 +63,9 @@
             "useFrameworks": "static"
           },
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "minSdkVersion": 26,
-            "buildToolsVersion": "35.0.0"
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26
           }
         }
       ],
