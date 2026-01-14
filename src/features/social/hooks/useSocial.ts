@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { 
-  doc, setDoc, deleteDoc, 
-  serverTimestamp, collection, query, where, getDocs, getDoc, onSnapshot 
+import {
+  doc, setDoc, deleteDoc,
+  serverTimestamp, collection, query, where, getDocs, getDoc, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
@@ -147,14 +147,21 @@ export const useSocialList = (userId: string | undefined, type: 'following' | 'f
         if (targetIds.length === 0) {
           setUsers([]);
         } else {
-          const userPromises = targetIds.map(async (id) => {
+          const userPromises = targetIds.map(async (id, index) => {
             try {
               const userDoc = await getDoc(doc(db, 'users', id));
               if (userDoc.exists()) {
                 return { uid: userDoc.id, ...userDoc.data() };
+              } else {
+                // ユーザーが存在しない場合、フォローデータを削除して整理する
+                // snapshot.docs[index] が対応する follow ドキュメント
+                const followDocRef = snapshot.docs[index].ref;
+                console.log(`Deleting orphan follow record: ${followDocRef.id} (Target user ${id} not found)`);
+                await deleteDoc(followDocRef);
+                return null;
               }
-              return null;
             } catch (e) {
+              console.error(`Error fetching user ${id}:`, e);
               return null;
             }
           });

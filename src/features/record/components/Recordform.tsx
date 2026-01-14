@@ -14,13 +14,13 @@ import { useHealthKit } from '../../../hooks/useHealthKit';
 export const RecordForm = () => {
   const router = useRouter();
   const { userProfile } = useAuth();
-  
-  const { availableTypes, createNewExerciseType } = useExerciseTypes(userProfile);
+
+  const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
   const { saveRecord, saving } = useRecordSaver();
   const { getTodaySteps, loading: healthLoading } = useHealthKit();
 
   const [activities, setActivities] = useState<any[]>([]);
-  const [weight, setWeight] = useState(''); 
+  const [weight, setWeight] = useState('');
   const [comment, setComment] = useState('');
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [postToTimeline, setPostToTimeline] = useState(true);
@@ -44,7 +44,7 @@ export const RecordForm = () => {
       lowVal = type.metsValues['低'];
       midVal = type.metsValues['中'];
       highVal = type.metsValues['高'];
-    } 
+    }
     // パターンB: フラットな構造の場合 (自分で作ったカスタム運動など)
     else {
       lowVal = type.low;
@@ -63,8 +63,8 @@ export const RecordForm = () => {
         id: Date.now().toString(),
         name: type.name || '名称不明',
         intensity: '中',
-        duration: 30, 
-        steps: 0, 
+        duration: 30,
+        steps: 0,
         mets: mid, // デフォルト強度「中」のMETsをセット
         baseMets: { low, mid, high }
       }
@@ -75,7 +75,7 @@ export const RecordForm = () => {
   const handleUpdateActivity = (id: string, field: string, value: any) => {
     setActivities(activities.map(act => {
       if (act.id !== id) return act;
-      
+
       if (field === 'intensity') {
         // 強度が変わったらMETsも更新
         const newMets = act.baseMets[value === '低' ? 'low' : value === '高' ? 'high' : 'mid'] ?? 3.5;
@@ -92,7 +92,7 @@ export const RecordForm = () => {
   const handleImportHealthData = async () => {
     try {
       const steps = await getTodaySteps();
-      
+
       if (!steps || steps === 0) {
         // 文言変更：情報源を明確に
         Alert.alert("Appleヘルスケア", "今日の歩数データが見つかりませんでした。(または0歩)");
@@ -100,7 +100,7 @@ export const RecordForm = () => {
       }
 
       const walkIndex = activities.findIndex(a => a.name.includes('ウォーキング') || a.name.includes('歩行'));
-      
+
       if (walkIndex >= 0) {
         const updated = [...activities];
         updated[walkIndex].steps = steps;
@@ -109,26 +109,26 @@ export const RecordForm = () => {
       } else {
         // マスタから「ウォーキング」を探す
         const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
-        
+
         // ウォーキングのMETsを取得 (なければデフォルト)
         let wLow = 3.0, wMid = 3.5, wHigh = 4.0;
         if (walkType) {
-            if (walkType.metsValues) {
-                wLow = walkType.metsValues['低'] || 3.0;
-                wMid = walkType.metsValues['中'] || 3.5;
-                wHigh = walkType.metsValues['高'] || 4.0;
-            } else {
-                wLow = walkType.low || 3.0;
-                wMid = walkType.mid || 3.5;
-                wHigh = walkType.high || 4.0;
-            }
+          if (walkType.metsValues) {
+            wLow = walkType.metsValues['低'] || 3.0;
+            wMid = walkType.metsValues['中'] || 3.5;
+            wHigh = walkType.metsValues['高'] || 4.0;
+          } else {
+            wLow = walkType.low || 3.0;
+            wMid = walkType.mid || 3.5;
+            wHigh = walkType.high || 4.0;
+          }
         }
 
         const newActivity = {
           id: Date.now().toString(),
           name: walkType?.name || 'ウォーキング',
           intensity: '中',
-          duration: 0, 
+          duration: 0,
           steps: steps,
           mets: Number(wMid),
           baseMets: {
@@ -175,9 +175,9 @@ export const RecordForm = () => {
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <Text style={styles.sectionTitle}>運動メニュー</Text>
-            
-            <TouchableOpacity 
-              style={styles.healthButton} 
+
+            <TouchableOpacity
+              style={styles.healthButton}
               onPress={handleImportHealthData}
               disabled={healthLoading}
             >
@@ -195,9 +195,9 @@ export const RecordForm = () => {
 
           {/* 審査対策: クレジット表記を明示的に追加 */}
           <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
-             <Text style={styles.attributionText}>Data from Apple Health</Text>
+            <Text style={styles.attributionText}>Data from Apple Health</Text>
           </View>
-          
+
           {activities.length === 0 ? (
             <Text style={styles.emptyText}>まだ追加されていません</Text>
           ) : (
@@ -208,7 +208,7 @@ export const RecordForm = () => {
                 activity={act}
                 onUpdate={handleUpdateActivity}
                 onRemove={handleRemoveActivity}
-                weight={effectiveWeight} 
+                weight={effectiveWeight}
               />
             ))
           )}
@@ -230,8 +230,8 @@ export const RecordForm = () => {
           setPostToTimeline={setPostToTimeline}
         />
 
-        <TouchableOpacity 
-          style={[styles.submitButton, saving && styles.disabled]} 
+        <TouchableOpacity
+          style={[styles.submitButton, saving && styles.disabled]}
           onPress={handleSave}
           disabled={saving}
         >
@@ -250,9 +250,10 @@ export const RecordForm = () => {
         onClose={() => setSelectorVisible(false)}
         onSelect={handleSelectExercise}
         onCreateNew={() => {
-            setSelectorVisible(false);
-            setCreateVisible(true);
+          setSelectorVisible(false);
+          setCreateVisible(true);
         }}
+        onDelete={deleteExerciseType}
       />
 
       <CreateExerciseTypeForm
@@ -270,10 +271,10 @@ const styles = StyleSheet.create({
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
   emptyText: { textAlign: 'center', color: '#9CA3AF', marginBottom: 12, fontSize: 14 },
-  addButton: { 
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', 
-    padding: 14, borderWidth: 1, borderColor: '#3B82F6', borderRadius: 12, 
-    borderStyle: 'dashed', backgroundColor: '#EFF6FF' 
+  addButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    padding: 14, borderWidth: 1, borderColor: '#3B82F6', borderRadius: 12,
+    borderStyle: 'dashed', backgroundColor: '#EFF6FF'
   },
   addText: { color: '#3B82F6', fontWeight: 'bold', marginLeft: 8 },
   submitButton: {
