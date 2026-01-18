@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import {
+  collection, query, orderBy, onSnapshot,
+  doc, serverTimestamp, writeBatch // ★ writeBatch をインポート
+} from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 
 export const useGroups = () => {
@@ -17,29 +20,43 @@ export const useGroups = () => {
     return () => unsubscribe();
   }, []);
 
-  // グループ作成
+  // グループ作成 (修正版: Batch処理)
   const createGroup = async (name: string, description: string, userId: string) => {
     if (!name.trim() || !userId) return;
-    
-    // 1. グループドキュメント作成
-    const groupRef = await addDoc(collection(db, 'groups'), {
-      name,
-      description,
-      createdBy: userId,
-      createdAt: serverTimestamp(),
-      memberCount: 1, // 作成者は最初からメンバー
-    });
 
-    // 2. 作成者をメンバーとして追加 (Web版と同じく groupMembers コレクションを使用)
-    const memberRef = doc(collection(db, 'groupMembers'));
-    await setDoc(memberRef, {
-      groupId: groupRef.id,
-      userId: userId,
-      role: 'admin',
-      joinedAt: serverTimestamp(),
-    });
+    try {
+      // 1. バッチの開始
+      const batch = writeBatch(db);
 
-    return groupRef.id;
+      // 2. ドキュメント参照（ID）を先に作成
+      const groupRef = doc(collection(db, 'groups'));
+      const memberRef = doc(collection(db, 'groupMembers'));
+
+      // 3. バッチにセット (書き込み予約)
+      batch.set(groupRef, {
+        name,
+        description,
+        createdBy: userId,
+        createdAt: serverTimestamp(),
+        memberCount: 1,
+      });
+
+      batch.set(memberRef, {
+        groupId: groupRef.id, // 先ほど作成したIDを使用
+        userId: userId,
+        role: 'admin',
+        joinedAt: serverTimestamp(),
+      });
+
+      // 4. 一括コミット (ここで初めて書き込まれる)
+      await batch.commit();
+
+      return groupRef.id;
+
+    } catch (error) {
+      console.error("グループ作成エラー:", error);
+      throw error; // UI側でエラーハンドリングできるように再スロー
+    }
   };
 
   return { groups, loading, createGroup };
