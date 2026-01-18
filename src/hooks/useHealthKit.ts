@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
+import { Platform, AppState, AppStateStatus, Alert, Linking } from 'react-native';
 // iOS用
 import AppleHealthKit, { HealthValue, HealthKitPermissions } from 'react-native-health';
 // Android用
@@ -8,10 +8,11 @@ import {
   requestPermission,
   readRecords,
   getGrantedPermissions,
+  getSdkStatus, // ★追加
+  SdkAvailabilityStatus, // ★追加
   Permission,
 } from 'react-native-health-connect';
 
-// iOSの権限設定
 const iosPermissions: HealthKitPermissions = {
   permissions: {
     read: [AppleHealthKit?.Constants?.Permissions?.Steps],
@@ -21,40 +22,34 @@ const iosPermissions: HealthKitPermissions = {
 
 export const useHealthKit = () => {
   const [loading, setLoading] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   const [isAvailable, setIsAvailable] = useState(false);
   const [dailySteps, setDailySteps] = useState(0);
 
-  // 歩数を取得する共通関数
+  // ▼ 歩数を取得する関数
   const fetchSteps = useCallback(async () => {
     setLoading(true);
 
-    // --- iOSの実装 ---
     if (Platform.OS === 'ios') {
       const options = {
         date: new Date().toISOString(),
         includeManuallyAdded: true,
       };
-
       AppleHealthKit.getStepCount(options, (err: Object, results: HealthValue) => {
         setLoading(false);
-        if (err) {
-          console.log('Error fetching steps (iOS):', err);
-          return;
-        }
+        if (err) return;
         setDailySteps(results.value);
       });
       return;
     }
 
-    // --- Androidの実装 (Health Connect) ---
     if (Platform.OS === 'android') {
       try {
         const today = new Date();
-        today.setHours(0, 0, 0, 0); // 今日の0時0分0秒
+        today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1); // 明日の0時0分0秒
+        tomorrow.setDate(today.getDate() + 1);
 
-        // データの読み出し
         const result = await readRecords('Steps', {
           timeRangeFilter: {
             operator: 'between',
@@ -63,98 +58,126 @@ export const useHealthKit = () => {
           },
         });
 
-        // レコードごとの歩数を合計する
         const totalSteps = result.records.reduce((sum, record) => sum + record.count, 0);
-
-        console.log('Fetched Steps (Android):', totalSteps);
         setDailySteps(totalSteps);
       } catch (err) {
-        console.error('Error fetching steps (Android):', err);
+        console.log('[Android] 歩数取得エラー:', err);
       } finally {
         setLoading(false);
       }
-      return;
     }
-
-    setLoading(false);
   }, []);
 
-  // 初期化ロジック
+  // ▼ 安全な初期化チェック関数
+  const checkAndroidInitialization = async (): Promise<boolean> => {
+    try {
+      // 1. SDKの状態を確認
+      const status = await getSdkStatus();
+      if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE) {
+        Alert.alert("非対応", "このAndroidバージョンはヘルスコネクトに対応していません。");
+        return false;
+      }
+      if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
+        Alert.alert(
+          "更新が必要",
+          "ヘルスコネクトアプリのインストールまたは更新が必要です。",
+          [
+            { text: "ストアを開く", onPress: () => Linking.openURL('market://details?id=com.google.android.apps.healthdata') },
+            { text: "キャンセル" }
+          ]
+        );
+        return false;
+      }
+
+      // 2. 初期化を実行
+      const isInitialized = await initialize();
+      if (!isInitialized) {
+        // ★ここが重要！ falseならまだ準備できていないので、無理に進まない
+        console.log("Health Connect initialization failed (returned false).");
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      console.error("Initialization check error:", e);
+      return false;
+    }
+  };
+
+  // ▼ 権限をリクエストする関数（ボタンを押した時に呼ぶ）
+  const requestAccess = async () => {
+    if (Platform.OS !== 'android') return;
+    if (requesting) return;
+
+    setRequesting(true);
+    try {
+      // ★ステップ1: 安全に初期化できるかチェック
+      const canProceed = await checkAndroidInitialization();
+      if (!canProceed) {
+        // 初期化に失敗したら、ここで止める（これでクラッシュを防ぐ）
+        return;
+      }
+
+      // ★ステップ2: ここまで来たら安全にリクエストできる
+      const permissions: Permission[] = [{ accessType: 'read', recordType: 'Steps' }];
+      await requestPermission(permissions);
+
+      const granted = await getGrantedPermissions();
+      const hasPermission = granted.some(p => p.recordType === 'Steps');
+
+      if (hasPermission) {
+        setIsAvailable(true);
+        fetchSteps();
+      }
+    } catch (e) {
+      console.error("権限リクエスト失敗:", e);
+      Alert.alert("エラー", "ヘルスコネクトの起動に失敗しました。");
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  // ▼ 初回ロード時チェック
   useEffect(() => {
     const init = async () => {
       if (Platform.OS === 'ios') {
-        // iOS初期化
-        if (!AppleHealthKit) return;
         AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
-          if (error) {
-            console.log('[iOS] Cannot grant permissions!', error);
-            return;
+          if (!error) {
+            setIsAvailable(true);
+            fetchSteps();
           }
-          setIsAvailable(true);
-          fetchSteps();
         });
       } else if (Platform.OS === 'android') {
-        // Android初期化
-        try {
-          // 1. Health Connect SDKの初期化
-          const isInitialized = await initialize();
-          if (!isInitialized) {
-            console.log('[Android] Health Connect not initialized');
-            return;
-          }
-
-          // 2. 権限の確認とリクエスト
-          const permissions: Permission[] = [{ accessType: 'read', recordType: 'Steps' }];
-
-          // 既に許可されているか確認（オプション）
-          // const granted = await getGrantedPermissions(); 
-          // 必要に応じて requestPermission を呼ぶ形が一般的
-
-          const grantedPermissions = await requestPermission(permissions);
-
-          // 許可が得られたか確認（read権限があるか）
-          const hasPermission = grantedPermissions.some(
-            p => p.accessType === 'read' && p.recordType === 'Steps'
-          );
-
+        const canProceed = await checkAndroidInitialization();
+        if (canProceed) {
+          const granted = await getGrantedPermissions();
+          const hasPermission = granted.some(p => p.recordType === 'Steps');
           if (hasPermission) {
             setIsAvailable(true);
             fetchSteps();
-          } else {
-            console.log('[Android] Permission denied');
           }
-        } catch (error) {
-          console.error('[Android] Health Connect init error:', error);
         }
       }
     };
-
     init();
   }, [fetchSteps]);
 
-  // アプリが前面に戻った時にデータを再取得（更新）する
+  // アプリ復帰時の更新
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && isAvailable) {
         fetchSteps();
       }
     });
-
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [isAvailable, fetchSteps]);
 
-  // 手動リフレッシュ用に getTodaySteps も返す（中身は fetchSteps を呼ぶだけ）
-  const getTodaySteps = async () => {
-    await fetchSteps();
-    return dailySteps; // 以前のインターフェースとの互換性のため
-  };
-
   return {
-    dailySteps,    // home.tsx で使用
-    getTodaySteps, // 手動更新用
+    dailySteps,
+    getTodaySteps: fetchSteps,
     loading,
-    isAvailable
+    requesting,
+    isAvailable,
+    requestAccess,
   };
 };

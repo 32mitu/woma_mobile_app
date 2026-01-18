@@ -15,7 +15,8 @@ export default function HomeScreen() {
   const { userProfile } = useAuth();
 
   const { scheduleDailyReminder } = usePushNotifications(userProfile?.uid);
-  const { dailySteps, isAvailable } = useHealthKit();
+  // requestAccess をここで受け取る
+  const { dailySteps, isAvailable, requestAccess } = useHealthKit();
   const unreadCount = useUnreadCount();
 
   useEffect(() => {
@@ -51,7 +52,9 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {isAvailable && dailySteps > 100 && (
+      {/* ▼ ヘルスケアカードの表示ロジック修正 ▼ */}
+      {isAvailable ? (
+        // パターンA: 連携済み（通常表示）
         <View style={styles.stepCard}>
           <View style={styles.stepInfo}>
             <View style={styles.iconBadge}>
@@ -74,7 +77,29 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
           </TouchableOpacity>
         </View>
+      ) : (
+        // パターンB: 未連携（連携ボタンを表示）
+        <View style={styles.stepCard}>
+          <View style={styles.stepInfo}>
+            <View style={[styles.iconBadge, { backgroundColor: '#F3F4F6' }]}>
+              <Ionicons name="fitness" size={20} color="#6B7280" />
+            </View>
+            <View>
+              <Text style={styles.stepLabel}>ヘルスケア未連携</Text>
+              <Text style={[styles.stepCount, { fontSize: 14 }]}>歩数を自動記録する</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.recordButton, { backgroundColor: '#3B82F6' }]}
+            onPress={requestAccess} // ★ここでボタンを押すと権限画面が出る
+          >
+            <Text style={[styles.recordButtonText, { color: 'white' }]}>連携する</Text>
+            <Ionicons name="arrow-forward" size={16} color="white" />
+          </TouchableOpacity>
+        </View>
       )}
+      {/* ▲ 修正ここまで ▲ */}
 
       <Timeline />
     </SafeAreaView>
