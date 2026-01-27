@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet, Alert, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { GiftedChat, Actions } from 'react-native-gifted-chat';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
+import { useHeaderHeight } from '@react-navigation/elements';
 
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../src/features/auth/useAuth';
@@ -17,7 +18,9 @@ export default function ChatRoomScreen() {
   const partnerId = Array.isArray(id) ? id[0] : id;
   const { userProfile } = useAuth();
   const navigation = useNavigation();
-  
+  const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
+
   const { messages, onSend, sendImage, markAsRead } = useChat(userProfile?.uid, partnerId);
   const { reportContent, blockUser } = useSafety();
 
@@ -74,7 +77,7 @@ export default function ChatRoomScreen() {
   const handleBlock = async () => {
     if (!partnerId) return;
     await blockUser(partnerId);
-    navigation.goBack(); 
+    navigation.goBack();
   };
 
   const handlePickImage = useCallback(async () => {
@@ -88,7 +91,7 @@ export default function ChatRoomScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.5, // 圧縮だけはしておくと標準Imageでも少し軽くなります
+      quality: 0.5,
     });
 
     if (!result.canceled && result.assets.length > 0) {
@@ -119,17 +122,34 @@ export default function ChatRoomScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <GiftedChat
-        messages={messages}
-        onSend={messages => onSend(messages)}
-        user={currentUser}
-        renderUsernameOnMessage={false}
-        alwaysShowSend
-        renderActions={renderActions}
-        placeholder="メッセージを入力..."
-        textInputProps={{ style: styles.textInput }}
-      />
+    // SafeAreaViewは基本的な左右の安全領域確保に使用
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      {/* 【修正ポイント】
+         Androidでも iOSと同じように 'padding' を使い、
+         かつ headerHeight をしっかりオフセットとして設定します。
+         これで「隠れる」ことはなくなるはずです。
+      */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={headerHeight}
+      >
+        <GiftedChat
+          messages={messages}
+          onSend={messages => onSend(messages)}
+          user={currentUser}
+          renderUsernameOnMessage={false}
+          alwaysShowSend
+          renderActions={renderActions}
+          placeholder="メッセージを入力..."
+          textInputProps={{ style: styles.textInput }}
+          // GiftedChat側の制御は無効化
+          isKeyboardInternallyHandled={false}
+          keyboardShouldPersistTaps="never"
+          // 下部の安全領域（ホームバーなど）を確保
+          bottomOffset={insets.bottom}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

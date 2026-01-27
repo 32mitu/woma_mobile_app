@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native'; // 標準のImageに戻す
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+// ★修正: 標準のImageではなく、高速なexpo-imageを使用
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { collection, query, where, orderBy, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -11,6 +13,9 @@ export default function ChatListScreen() {
   const { userProfile } = useAuth();
   const [chatRooms, setChatRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ユーザー情報のメモリキャッシュ
+  const userCache = useRef<{ [key: string]: { name: string, avatar: string | null } }>({});
 
   useEffect(() => {
     if (!userProfile?.uid) return;
@@ -30,18 +35,24 @@ export default function ChatListScreen() {
         let partnerName = 'ユーザー';
         let partnerAvatar = null;
 
-        // キャッシュがあればそれを使う
         if (data.memberInfo && data.memberInfo[partnerId]) {
           const info = data.memberInfo[partnerId];
           partnerName = info.name;
           partnerAvatar = info.avatar;
-        } else {
+          userCache.current[partnerId] = { name: partnerName, avatar: partnerAvatar };
+        }
+        else if (userCache.current[partnerId]) {
+          partnerName = userCache.current[partnerId].name;
+          partnerAvatar = userCache.current[partnerId].avatar;
+        }
+        else {
           try {
             const userSnap = await getDoc(doc(db, 'users', partnerId));
             if (userSnap.exists()) {
               const uData = userSnap.data();
               partnerName = uData.username || 'ユーザー';
               partnerAvatar = uData.profileImageUrl;
+              userCache.current[partnerId] = { name: partnerName, avatar: partnerAvatar };
             }
           } catch (e) {
             console.warn('ユーザー情報取得失敗', e);
@@ -77,14 +88,17 @@ export default function ChatListScreen() {
         data={chatRooms}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.item} 
+          <TouchableOpacity
+            style={styles.item}
             onPress={() => router.push(`/dm/${item.partnerId}`)}
           >
-            {/* 標準のImageを使用 */}
-            <Image 
-              source={{ uri: item.partnerAvatar || 'https://via.placeholder.com/150' }} 
+            {/* ★修正: Imageコンポーネントをexpo-imageのものに変更 */}
+            <Image
+              source={item.partnerAvatar || 'https://via.placeholder.com/150'}
               style={styles.avatar}
+              contentFit="cover"
+              transition={200} // 表示アニメーション
+              cachePolicy="memory-disk" // 強力なキャッシュ
             />
             <View style={styles.content}>
               <View style={styles.row}>
@@ -104,13 +118,13 @@ export default function ChatListScreen() {
                 )}
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" style={{marginLeft: 8}} />
+            <Ionicons name="chevron-forward" size={20} color="#ccc" style={{ marginLeft: 8 }} />
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.center}>
             <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 10 }} />
-            <Text style={{color: '#888'}}>メッセージはまだありません</Text>
+            <Text style={{ color: '#888' }}>メッセージはまだありません</Text>
           </View>
         }
       />

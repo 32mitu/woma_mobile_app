@@ -6,72 +6,68 @@ import { useTimeline } from '../hooks/useTimeline';
 
 type Props = {
   groupId?: string;
+  // ★追加: ヘッダー用コンポーネントを受け取る
+  ListHeaderComponent?: React.ComponentType<any> | React.ReactElement | null;
 };
 
-export const Timeline = ({ groupId }: Props) => {
-  // フックから必要な関数と状態を受け取る
+export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
   const { posts, loading, refreshing, refresh, loadMore, hasMore } = useTimeline(groupId);
 
-  // 初回ロード中のみインジケータを表示
-  if (loading && posts.length === 0) {
+  // ★修正: ローディング中でもヘッダー（グループ詳細）だけは表示したい場合があるため、
+  // 全体を条件分岐で隠さず、FlashListのListEmptyComponent等を活用するのが理想ですが、
+  // ここでは簡易的に「ロード中で投稿ゼロ」のときだけローディング表示とします。
+  // ただし、ListHeaderComponentがある場合はそれを優先表示する設計に変更します。
+
+  const renderFooter = () => {
+    if (hasMore) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color="#9ca3af" />
+        </View>
+      );
+    }
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={styles.footerLoader}>
+        <Text style={styles.footerText}>これ以上投稿はありません</Text>
       </View>
     );
-  }
+  };
 
-  // 投稿がない場合
-  if (!loading && posts.length === 0) {
+  const renderEmpty = () => {
+    if (loading) return <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 20 }} />;
     return (
       <View style={styles.center}>
         <Text style={styles.emptyText}>
           {groupId ? "まだグループの投稿がありません。" : "まだ投稿がありません。"}
         </Text>
         <Text style={styles.emptyText}>最初の1人になりませんか？</Text>
-        {/* 空の状態でも引っ張って更新できるようにする */}
         <Text onPress={refresh} style={styles.retryText}>タップして更新</Text>
       </View>
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
       <FlashList
         data={posts}
-        // ネスト問題の回避: groupIdがある場合は親でスクロール制御されている可能性があるため調整が必要だが、
-        // 基本的にはFlashList自身にスクロールさせる方がパフォーマンスが良い
-        scrollEnabled={true}
-
+        scrollEnabled={true} // 常にスクロール許可
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         estimatedItemSize={400}
-
-        // ★ 引っ張って更新
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} />
         }
-
-        // ★ 無限スクロール (リストの端に来たら追加読み込み)
         onEndReached={loadMore}
-        onEndReachedThreshold={0.5} // 端の半分くらいまで来たら読み込み開始
+        onEndReachedThreshold={0.5}
 
-        // 追加読み込み中のインジケータ
-        ListFooterComponent={() =>
-          hasMore ? (
-            <View style={styles.footerLoader}>
-              <ActivityIndicator size="small" color="#9ca3af" />
-            </View>
-          ) : (
-            <View style={styles.footerLoader}>
-              <Text style={styles.footerText}>これ以上投稿はありません</Text>
-            </View>
-          )
-        }
+        // ★追加: ここでヘッダーを描画
+        ListHeaderComponent={ListHeaderComponent}
+
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
 
         renderItem={({ item }) => {
           const targetUserId = item.userId || item.uid || item.authorId || item.senderId || item.user?._id;
-
           return (
             <Post
               post={{
@@ -98,10 +94,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
+    alignItems: 'center',
   },
   listContent: {
     paddingBottom: 80,

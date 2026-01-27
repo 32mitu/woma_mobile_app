@@ -4,10 +4,10 @@ import { FlashList } from '@shopify/flash-list';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, limit, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, limit, where, orderBy, startAt, endAt } from 'firebase/firestore'; // ★ startAt, endAt を追加
 import { db } from '../firebaseConfig';
 import { UserList } from '../src/features/social/components/UserList';
-import { Post } from '../src/features/timeline/components/Post'; // 先ほど作成したPostコンポーネント
+import { Post } from '../src/features/timeline/components/Post';
 
 type SearchType = 'user' | 'tag';
 
@@ -39,26 +39,35 @@ export default function SearchScreen() {
 
     try {
       if (type === 'user') {
-        // --- ユーザー検索 (既存ロジック) ---
+        // --- ユーザー検索 (修正版: Firestoreクエリを使用) ---
         const usersRef = collection(db, 'users');
-        // Firestoreは部分一致検索が苦手なため、クライアントサイドフィルタリングまたは
-        // 前方一致検索 (text ~ text + '\uf8ff') を使うのが一般的ですが、今回は取得してフィルタする方式を維持
-        const q = query(usersRef, limit(50));
+
+        // ※注意: Firestoreは大文字小文字を区別します。
+        // 厳密に検索させるなら、保存時に「検索用小文字フィールド(username_lowerなど)」を作るのがベストプラクティスですが、
+        // ここでは簡易的に入力されたテキストで前方一致検索を行います。
+
+        // ユーザー名での前方一致検索
+        // これにより、例えば "tara" と打てば "tarou", "tarao" だけが取得されます。
+        // 全ユーザーをダウンロードしなくて済むため高速です。
+        const q = query(
+          usersRef,
+          orderBy('username'),
+          startAt(text),
+          endAt(text + '\uf8ff'),
+          limit(20)
+        );
+
         const snapshot = await getDocs(q);
 
-        const searchLower = text.toLowerCase();
-        const filteredUsers = snapshot.docs
-          .map(doc => ({ uid: doc.id, ...doc.data() } as any))
-          .filter(user => {
-            const name = user.username?.toLowerCase() || '';
-            const display = user.displayName?.toLowerCase() || '';
-            return name.includes(searchLower) || display.includes(searchLower);
-          });
+        const foundUsers = snapshot.docs.map(doc => ({
+          uid: doc.id,
+          ...doc.data()
+        }));
 
-        setResults(filteredUsers);
+        setResults(foundUsers);
 
       } else {
-        // --- タグ検索 (Web版 TagPage.jsx の移植) ---
+        // --- タグ検索 (既存のまま) ---
         // 入力値に#がなければ付与する
         const tag = text.trim().startsWith('#') ? text.trim() : `#${text.trim()}`;
 
@@ -143,7 +152,7 @@ export default function SearchScreen() {
               data={results}
               estimatedItemSize={200}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <Post post={item} />} // Postコンポーネントを再利用
+              renderItem={({ item }) => <Post post={item} />}
               contentContainerStyle={{ padding: 16 }}
               ListEmptyComponent={
                 results.length === 0 && !loading ? (
