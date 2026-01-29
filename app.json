@@ -21,10 +21,10 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSHealthShareUsageDescription": "WOMA uses your step count data to visualize your daily activity and encourage habit building.",
-        "NSHealthUpdateUsageDescription": "WOMA saves your workout sessions to Apple Health to keep your activity data synced.",
-        "NSCameraUsageDescription": "WOMA needs camera access to take photos for your profile and workout posts.",
-        "NSPhotoLibraryUsageDescription": "WOMA needs access to your photos to let you choose images for your profile and workout posts.",
+        "NSHealthShareUsageDescription": "今日の歩数を取得し、活動記録グラフに表示して運動不足解消をサポートするために使用します。",
+        "NSHealthUpdateUsageDescription": "アプリ内で記録した運動データをヘルスケアに保存し、活動履歴を一元管理するために使用します。",
+        "NSCameraUsageDescription": "プロフィール写真の撮影や、チャットでの写真送信のためにカメラを使用します。",
+        "NSPhotoLibraryUsageDescription": "プロフィール画像の設定や、チャットでの写真送信のためにライブラリへアクセスします。",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [

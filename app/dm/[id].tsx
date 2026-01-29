@@ -90,7 +90,9 @@ export default function ChatRoomScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,          // 複数選択時は編集不可にする
+      allowsMultipleSelection: true, // ★追加: 複数選択を有効化
+      selectionLimit: 10,            // ★追加: 一度に送れる枚数を10枚に制限
       quality: 0.5,
     });
 
@@ -100,7 +102,33 @@ export default function ChatRoomScreen() {
         name: userProfile.username,
         avatar: userProfile.profileImageUrl
       };
-      await sendImage(result.assets[0].uri, user);
+
+      const count = result.assets.length;
+      // 枚数に応じてメッセージを切り替え
+      const confirmMessage = count === 1
+        ? "この画像を送信しますか？"
+        : `${count}枚の画像を送信しますか？`;
+
+      Alert.alert(
+        "画像の送信",
+        confirmMessage,
+        [
+          { text: "キャンセル", style: "cancel" },
+          {
+            text: "送信",
+            onPress: async () => {
+              // ★修正: 選択された全画像を並列で送信
+              try {
+                const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
+                await Promise.all(sendPromises);
+              } catch (e) {
+                console.error(e);
+                Alert.alert("エラー", "画像の送信に失敗しました");
+              }
+            }
+          }
+        ]
+      );
     }
   }, [userProfile, sendImage]);
 
@@ -122,13 +150,7 @@ export default function ChatRoomScreen() {
   };
 
   return (
-    // SafeAreaViewは基本的な左右の安全領域確保に使用
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      {/* 【修正ポイント】
-         Androidでも iOSと同じように 'padding' を使い、
-         かつ headerHeight をしっかりオフセットとして設定します。
-         これで「隠れる」ことはなくなるはずです。
-      */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
@@ -143,10 +165,8 @@ export default function ChatRoomScreen() {
           renderActions={renderActions}
           placeholder="メッセージを入力..."
           textInputProps={{ style: styles.textInput }}
-          // GiftedChat側の制御は無効化
           isKeyboardInternallyHandled={false}
           keyboardShouldPersistTaps="never"
-          // 下部の安全領域（ホームバーなど）を確保
           bottomOffset={insets.bottom}
         />
       </KeyboardAvoidingView>

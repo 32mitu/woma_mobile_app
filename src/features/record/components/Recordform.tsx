@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
 import { useRecordSaver } from '../useRecordSaver';
@@ -176,27 +176,32 @@ export const RecordForm = () => {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <Text style={styles.sectionTitle}>運動メニュー</Text>
 
-            <TouchableOpacity
-              style={styles.healthButton}
-              onPress={handleImportHealthData}
-              disabled={healthLoading}
-            >
-              {healthLoading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                // アイコンをハートマークに変更 (HealthKitらしさの強調)
-                <Ionicons name="heart" size={16} color="white" />
-              )}
-              <Text style={styles.healthButtonText}>
-                {healthLoading ? '取得中...' : 'Appleヘルスケアから取得'}
-              </Text>
-            </TouchableOpacity>
+            {/* ★修正: Androidの場合はボタンを表示しない */}
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.healthButton}
+                onPress={handleImportHealthData}
+                disabled={healthLoading}
+              >
+                {healthLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  // アイコンをハートマークに変更 (HealthKitらしさの強調)
+                  <Ionicons name="heart" size={16} color="white" />
+                )}
+                <Text style={styles.healthButtonText}>
+                  {healthLoading ? '取得中...' : 'Appleヘルスケアから取得'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* 審査対策: クレジット表記を明示的に追加 */}
-          <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
-            <Text style={styles.attributionText}>Data from Apple Health</Text>
-          </View>
+          {/* ★修正: Androidの場合はクレジットも表示しない */}
+          {Platform.OS === 'ios' && (
+            <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
+              <Text style={styles.attributionText}>Data from Apple Health</Text>
+            </View>
+          )}
 
           {activities.length === 0 ? (
             <Text style={styles.emptyText}>まだ追加されていません</Text>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, Alert, 
+import {
+  View, Text, TextInput, TouchableOpacity, Alert,
   KeyboardAvoidingView, Platform, ScrollView, SafeAreaView, StyleSheet, ActivityIndicator,
   Linking // ★追加: 外部リンクを開くために必要
 } from 'react-native';
@@ -16,12 +16,12 @@ export default function LoginScreen() {
   const router = useRouter();
   // useAuthから user と loading (初期判定用) を取得
   const { signInWithGoogle, signInWithApple, user, loading: authLoading } = useAuth();
-  
+
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  
+
   // ボタン押下時のローディング用
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -36,7 +36,7 @@ export default function LoginScreen() {
   const openTerms = () => {
     // 審査提出時はApple標準EULAのURLでも通過することが多いですが、
     // 独自Webページがある場合はそちらに差し替えてください。
-    Linking.openURL('https://note.com/kumaotoko32/n/na56855828e87?app_launch=false');
+    Linking.openURL('https://note.com/kumaotoko32/n/ned99f2c17b7c?app_launch=false');
   };
 
   // 認証確認中、または転送待機中は画面を表示せずローディング
@@ -58,7 +58,7 @@ export default function LoginScreen() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user; // 変数名を明確化
-      
+
       // Firestoreにユーザー情報を作成
       await setDoc(doc(db, "users", newUser.uid), {
         uid: newUser.uid, // uidも保存しておくと便利
@@ -69,7 +69,7 @@ export default function LoginScreen() {
         createdAt: serverTimestamp(),
         blockedUsers: [],
       });
-      
+
       Alert.alert("登録成功", "アカウントが作成されました！", [
         { text: "OK", onPress: () => router.replace('/(tabs)/home') }
       ]);
@@ -111,7 +111,7 @@ export default function LoginScreen() {
       console.error("Google Login Error:", error);
       // キャンセル時はアラートを出さない方がUXが良い
       if (error !== 'cancel') {
-         // 必要ならアラート
+        // 必要ならアラート
       }
     } finally {
       setIsSubmitting(false);
@@ -133,12 +133,12 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-          
+
           <View style={styles.headerSection}>
             <Text style={styles.title}>WOMA</Text>
             <Text style={styles.subtitle}>3日坊主を、肯定する。</Text>
@@ -183,7 +183,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.button, isSubmitting && styles.buttonDisabled]}
               onPress={isLoginMode ? handleLogin : handleSignUp}
               disabled={isSubmitting}
@@ -226,7 +226,7 @@ export default function LoginScreen() {
               />
 
               {/* Google Login */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.googleButton}
                 onPress={handleGoogleLogin}
                 disabled={isSubmitting}
@@ -237,7 +237,7 @@ export default function LoginScreen() {
             </View>
             {/* ------------------------- */}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setIsLoginMode(!isLoginMode)}
               style={styles.switchButton}
             >
@@ -257,39 +257,39 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   keyboardView: { flex: 1 },
   scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  
+
   headerSection: { alignItems: 'center', marginBottom: 32 },
   title: { fontSize: 40, fontWeight: 'bold', color: '#3B82F6', marginBottom: 8 },
   subtitle: { fontSize: 16, color: '#6B7280' },
-  
+
   formContainer: { gap: 16 },
   inputGroup: { marginBottom: 4 },
   label: { fontSize: 14, color: '#4B5563', marginBottom: 4, fontWeight: 'bold' },
-  input: { 
-    width: '100%', backgroundColor: '#F3F4F6', padding: 16, 
+  input: {
+    width: '100%', backgroundColor: '#F3F4F6', padding: 16,
     borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB',
-    fontSize: 16 
+    fontSize: 16
   },
-  
+
   button: {
-    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12, 
+    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12,
     alignItems: 'center', marginTop: 8,
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, 
+    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 4, elevation: 4
   },
   buttonDisabled: { backgroundColor: '#93C5FD' },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  
+
   switchButton: { marginTop: 16, alignItems: 'center' },
   switchText: { color: '#3B82F6', fontWeight: '600' },
 
   // ソーシャルログイン用スタイル
-  dividerContainer: { 
-    flexDirection: 'row', alignItems: 'center', marginVertical: 16 
+  dividerContainer: {
+    flexDirection: 'row', alignItems: 'center', marginVertical: 16
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
   dividerText: { marginHorizontal: 16, color: '#9CA3AF', fontSize: 12 },
-  
+
   socialButtonsContainer: { gap: 12 },
   appleButton: { width: '100%', height: 50 },
   googleButton: {
