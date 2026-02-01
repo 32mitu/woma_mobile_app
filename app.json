@@ -42,13 +42,15 @@
       "edgeToEdgeEnabled": true,
       "package": "com.kouheimitsumura.app",
       "versionCode": 9,
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.health.READ_STEPS",
         "android.permission.health.WRITE_STEPS",
-        "com.google.android.gms.permission.ACTIVITY_RECOGNITION"
+        "com.google.android.gms.permission.ACTIVITY_RECOGNITION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -56,6 +58,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-localization",
       [
         "expo-build-properties",
         {

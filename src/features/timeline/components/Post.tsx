@@ -12,7 +12,8 @@ import { CommentSection } from './CommentSection';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
 import { useSafety } from '../../../hooks/useSafety';
-import { usePushNotifications } from '../../../hooks/usePushNotifications'; // ★追加
+import { usePushNotifications } from '../../../hooks/usePushNotifications';
+import { useTranslation } from 'react-i18next'; // 追加
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -36,22 +37,23 @@ type PostProps = {
 
 export const Post = ({ post }: PostProps) => {
   const router = useRouter();
+  const { t } = useTranslation(); // 追加
   const { userProfile } = useAuth();
   const { reportContent, blockUser } = useSafety();
-  const { sendPushNotification } = usePushNotifications(); // ★追加
+  const { sendPushNotification } = usePushNotifications();
 
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likes);
   const [showComments, setShowComments] = useState(false);
   const [activePage, setActivePage] = useState(0);
 
-  const [authorName, setAuthorName] = useState("読み込み中...");
+  const [authorName, setAuthorName] = useState(t('common.loading'));
   const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAuthorProfile = async () => {
       if (!post.userId) {
-        setAuthorName("不明なユーザー");
+        setAuthorName(t('timeline.unknownUser'));
         return;
       }
 
@@ -64,11 +66,11 @@ export const Post = ({ post }: PostProps) => {
           setAuthorName(data.username || data.displayName || "名無し");
           setAuthorAvatar(data.profileImageUrl || data.photoURL || null);
         } else {
-          setAuthorName("退会済みユーザー");
+          setAuthorName(t('timeline.deletedUser'));
         }
       } catch (error) {
         console.error("User fetch error:", error);
-        setAuthorName("エラー");
+        setAuthorName(t('common.error'));
       }
     };
 
@@ -92,12 +94,11 @@ export const Post = ({ post }: PostProps) => {
       if (newLiked) {
         await updateDoc(postRef, { likes: increment(1) });
 
-        // ★追加: ① いいね通知を送信 (自分自身の投稿でなければ)
         if (post.userId && post.userId !== userProfile.uid) {
           sendPushNotification(
             post.userId,
-            "いいねされました！",
-            `${userProfile.username || '誰か'}さんがあなたの投稿にいいねしました`,
+            t('notification.likedTitle'),
+            t('notification.likedBody', { user: userProfile.username || t('notification.someone') }),
             { type: 'like', postId: post.id }
           );
         }
@@ -114,32 +115,32 @@ export const Post = ({ post }: PostProps) => {
     if (!userProfile) return;
     const isMyPost = userProfile.uid === post.userId;
     const options = isMyPost
-      ? [{ text: '削除する', style: 'destructive', onPress: handleDelete }]
+      ? [{ text: t('common.delete'), style: 'destructive', onPress: handleDelete }]
       : [
-        { text: '通報する', style: 'destructive', onPress: () => handleReport() },
-        { text: 'ブロックする', style: 'destructive', onPress: () => handleBlock() }
+        { text: t('common.report'), style: 'destructive', onPress: () => handleReport() },
+        { text: t('common.block'), style: 'destructive', onPress: () => handleBlock() }
       ];
 
-    Alert.alert('メニュー', '', [...options as any, { text: 'キャンセル', style: 'cancel' }]);
+    Alert.alert(t('common.menu'), '', [...options as any, { text: t('common.cancel'), style: 'cancel' }]);
   };
 
   const handleDelete = async () => {
     try {
       await deleteDoc(doc(db, "timeline", post.id));
     } catch (e) {
-      Alert.alert("エラー", "削除に失敗しました");
+      Alert.alert(t('common.error'), "削除に失敗しました"); // サーバーエラーメッセージ等はそのままの場合も
     }
   };
 
   const handleReport = async () => {
-    await reportContent(post.id, 'post', '不適切な投稿');
-    Alert.alert("報告", "運営に報告しました。");
+    await reportContent(post.id, 'post', t('timeline.menuReport'));
+    Alert.alert(t('common.reportTitle'), t('common.reportMessage'));
   };
 
   const handleBlock = async () => {
     if (post.userId) {
       await blockUser(post.userId);
-      Alert.alert("ブロック", "このユーザーをブロックしました。");
+      Alert.alert(t('common.blockTitle'), t('common.blockMessage'));
     }
   };
 
@@ -240,7 +241,7 @@ export const Post = ({ post }: PostProps) => {
             color={liked ? "#ef4444" : "#4b5563"}
           />
           <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>
-            {likeCount > 0 ? likeCount : 'えらい！'}
+            {likeCount > 0 ? likeCount : t('timeline.like')}
           </Text>
         </TouchableOpacity>
 
@@ -250,7 +251,7 @@ export const Post = ({ post }: PostProps) => {
         >
           <Ionicons name="chatbubble-outline" size={22} color="#4b5563" />
           <Text style={styles.actionText}>
-            {post.comments && post.comments > 0 ? post.comments : 'コメント'}
+            {post.comments && post.comments > 0 ? post.comments : t('timeline.comment')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -258,7 +259,7 @@ export const Post = ({ post }: PostProps) => {
       {showComments && (
         <CommentSection
           postId={post.id}
-          postAuthorId={post.userId} // ★追加: 投稿者のIDを渡す
+          postAuthorId={post.userId}
         />
       )}
     </View>

@@ -4,9 +4,11 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ProfileEditForm } from '../../src/features/profile/components/ProfileEditForm';
+import { useTranslation } from 'react-i18next'; // 追加
 
 export default function ProfileEditScreen() {
   const router = useRouter();
+  const { t } = useTranslation(); // 追加
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -15,7 +17,7 @@ export default function ProfileEditScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="close" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.title}>プロフィール編集</Text>
+        <Text style={styles.title}>{t('profile.editProfile', 'プロフィール編集')}</Text>
         <View style={{ width: 24 }} />
       </View>
 

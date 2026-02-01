@@ -1,0 +1,62 @@
+{
+    "common": {
+        "loading": "読み込み中...",
+        "error": "エラー",
+        "success": "成功",
+        "save": "保存する",
+        "saveFailed": "保存に失敗しました",
+        "menu": "メニュー",
+        "cancel": "キャンセル",
+        "delete": "削除する",
+        "report": "通報する",
+        "block": "ブロックする",
+        "reportTitle": "報告",
+        "reportMessage": "運営に報告しました。",
+        "blockTitle": "ブロック",
+        "blockMessage": "このユーザーをブロックしました。"
+    },
+    "tab": {
+        "home": "ホーム",
+        "record": "記録",
+        "profile": "マイページ"
+    },
+    "record": {
+        "todaysRecord": "今日の記録",
+        "exerciseMenu": "運動メニュー",
+        "importHealth": "Appleヘルスケアから取得",
+        "importing": "取得中...",
+        "dataFromHealth": "Data from Apple Health",
+        "noActivity": "まだ追加されていません",
+        "addExercise": "運動を追加する",
+        "saveRecord": "記録を保存",
+        "healthAlertTitle": "Apple Health連携",
+        "healthNoData": "今日の歩数データが見つかりませんでした。(または0歩)",
+        "healthSuccessUpdate": "既存のウォーキング記録に {{steps}}歩 を設定しました。",
+        "healthSuccessNew": "ヘルスケアから {{steps}}歩 を取得しました。",
+        "healthError": "Appleヘルスケアデータの取得に失敗しました。設定 > プライバシー > ヘルスケア から権限を確認してください。",
+        "validationError": "記録する内容（運動、体重、コメント、写真のいずれか）を入力してください"
+    },
+    "profile": {
+        "editProfile": "プロフィール編集",
+        "changePhoto": "写真を変更",
+        "username": "ユーザー名",
+        "usernamePlaceholder": "ユーザー名",
+        "bio": "自己紹介",
+        "bioPlaceholder": "自己紹介を入力",
+        "height": "身長",
+        "weight": "体重",
+        "updateSuccess": "プロフィールを更新しました"
+    },
+    "timeline": {
+        "unknownUser": "不明なユーザー",
+        "deletedUser": "退会済みユーザー",
+        "like": "えらい！",
+        "comment": "コメント",
+        "menuReport": "不適切な投稿"
+    },
+    "notification": {
+        "likedTitle": "いいねされました！",
+        "likedBody": "{{user}}さんがあなたの投稿にいいねしました",
+        "someone": "誰か"
+    }
+}
