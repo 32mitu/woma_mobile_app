@@ -48,6 +48,6 @@ yarn-error.*
 # --- Security (Firebase & Keys) ---
 # これらはAPIキーを含むため絶対に公開してはいけません
 google-services.json
-GoogleService-Info.plist
+# GoogleService-Info.plist
 credentials.json
 *.keystore

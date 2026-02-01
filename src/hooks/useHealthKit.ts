@@ -107,6 +107,12 @@ export const useHealthKit = () => {
   // ▼ 権限をリクエストする関数（ボタンを押した時に呼ぶ）
   const requestAccess = async () => {
     if (Platform.OS !== 'android') return;
+
+    // ★修正: クラッシュ回避のため、Androidでは一時的に処理を中断してアラートを表示
+    Alert.alert("お知らせ", "アンドロイドのほうにはただいま実装中です。少々お待ちください。");
+    return;
+
+    /* 以下の一時的に無効化したコード
     if (requesting) return;
 
     setRequesting(true);
@@ -135,6 +141,7 @@ export const useHealthKit = () => {
     } finally {
       setRequesting(false);
     }
+    */
   };
 
   // ▼ 初回ロード時チェック
@@ -148,13 +155,19 @@ export const useHealthKit = () => {
           }
         });
       } else if (Platform.OS === 'android') {
+        // Androidの自動初期化も念のため停止する場合はここもコメントアウトできますが、
+        // クラッシュの原因は requestPermission なので requestAccess の修正だけで十分です。
         const canProceed = await checkAndroidInitialization();
         if (canProceed) {
-          const granted = await getGrantedPermissions();
-          const hasPermission = granted.some(p => p.recordType === 'Steps');
-          if (hasPermission) {
-            setIsAvailable(true);
-            fetchSteps();
+          try {
+            const granted = await getGrantedPermissions();
+            const hasPermission = granted.some(p => p.recordType === 'Steps');
+            if (hasPermission) {
+              setIsAvailable(true);
+              fetchSteps();
+            }
+          } catch (e) {
+            console.log("初期チェックエラー:", e);
           }
         }
       }
