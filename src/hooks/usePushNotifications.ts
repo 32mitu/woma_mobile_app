@@ -7,6 +7,7 @@ import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 
+// 通知ハンドラの設定（アプリがフォアグラウンドの時も通知を表示する設定）
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -24,21 +25,24 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   const responseListener = useRef<Notifications.EventSubscription>(null);
 
   useEffect(() => {
+    // 明示的に登録が求められた場合のみ実行
     if (!shouldRegister) return;
 
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
       if (userId && token) {
         saveTokenToFirestore(userId, token);
-        // リマインダー設定（重複チェック付き）
+        // リマインダー設定（ログイン時など）
         scheduleDailyReminder();
       }
     });
 
+    // 通知受信リスナー
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       setNotification(notification);
     });
 
+    // 通知タップリスナー
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.type === 'dm' && data?.partnerId) {
@@ -63,7 +67,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     }
   };
 
-  // ★修正箇所: 複数回のリマインダー（08:05, 08:10, 21:00）を設定
+  // リマインダー設定（重複チェック機能付き）
   const scheduleDailyReminder = async () => {
     try {
       // 1. 現在セットされている通知をすべて確認
@@ -74,14 +78,17 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         (n) => n.content.data?.type === 'reminder'
       );
 
-      // 3. すでに3件セットされていたら「何もしない」で終了（簡易チェック）
-      if (existingReminders.length === 3) {
-        console.log("📅 [Notification] リマインダーは既に2件設定済みです");
+      // 設定したいリマインダーの数
+      const TARGET_REMINDER_COUNT = 1;
+
+      // 3. すでに設定済みなら「何もしない」で終了
+      if (existingReminders.length === TARGET_REMINDER_COUNT) {
         return;
       }
 
       // 4. 数が合わない場合は、一旦reminder系をすべて削除して再登録
-      console.log(`📅 [Notification] リマインダー設定を更新します（現在: ${existingReminders.length}件）...`);
+      // ログ出力は削除
+
       for (const reminder of existingReminders) {
         await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
       }
@@ -114,24 +121,10 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         });
       }
 
-      // ★テスト用: 10秒後に通知を出す（動作確認用）
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "🔔 テスト通知",
-          body: "これが届けば通知機能は正常です！",
-          sound: 'default',
-          channelId: 'default',
-        } as any,
-        trigger: {
-          seconds: 10,
-        } as any,
-      });
-      console.log("📅 [Notification] テスト通知を10秒後にセットしました");
-
-      console.log("📅 [Notification] 21:00 のリマインダーをセットしました");
+      // ログ出力は削除
 
     } catch (error) {
-      console.error("Failed to schedule reminder:", error);
+      // ignore
     }
   };
 
@@ -165,14 +158,22 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         });
       }
     } catch (error) {
-      console.error("Failed to send notification:", error);
+      // ignore
     }
   };
 
-  return { expoPushToken, notification, scheduleDailyReminder, sendPushNotification };
+  // registerForPushNotificationsAsync をreturnに追加
+  return {
+    expoPushToken,
+    notification,
+    scheduleDailyReminder,
+    sendPushNotification,
+    registerForPushNotificationsAsync
+  };
 };
 
-async function registerForPushNotificationsAsync() {
+// 独立した関数としてエクスポート（フック内からも呼べるように）
+export async function registerForPushNotificationsAsync() {
   let token;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -191,10 +192,25 @@ async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
+      // 許可されなかった場合は終了
       return;
     }
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+
+    // プロジェクトIDが取得できない場合の安全策
+    if (!projectId) {
+      // ignore
+      // return; // 必要に応じてreturnするが、まずは続行させてみる
+    }
+
+    try {
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    } catch (e) {
+      // ignore
+    }
+  } else {
+    // シミュレーターの場合
+    // ignore
   }
   return token;
 }

@@ -1,87 +1,93 @@
-import { useState, useEffect } from 'react';
-import { 
-  onAuthStateChanged, 
-  User, 
+import { useEffect } from 'react';
+import {
+  onAuthStateChanged,
+  User,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithCredential,
-  deleteUser // ★追加
+  deleteUser
 } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc, deleteDoc } from "firebase/firestore"; // ★ deleteDoc 追加 
+import { doc, onSnapshot, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from '../../../firebaseConfig';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import { useAuthStore } from '../../store/authStore'; // Zustandストアをインポート
 
 // Google Sign-Inの初期設定
 GoogleSignin.configure({
-  iosClientId:"540454404812-p95ail006s113tvlthe8vb542a953c4j.apps.googleusercontent.com",
-  webClientId: '540454404812-grhtketipkrgpa24m3u7hejbn94v0bec.apps.googleusercontent.com' 
+  iosClientId: "540454404812-p95ail006s113tvlthe8vb542a953c4j.apps.googleusercontent.com",
+  webClientId: '540454404812-grhtketipkrgpa24m3u7hejbn94v0bec.apps.googleusercontent.com'
 });
 
-type UserProfile = {
-  uid: string;
-  email: string | null;
-  username: string;
-  weight?: number | null;
-  height?: number | null;
-  profileImageUrl?: string | null;
-  bio?: string;
-  blockedUsers?: string[];
-};
+// UserProfile型は store/authStore.ts で定義されているものと合わせるのが理想ですが、
+// ここでは戻り値の互換性のために同様の型を使用、またはストアから型をインポートしてください。
+// 今回はストアが { user, ... } を管理しているため、ストアの定義に従います。
 
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Zustandから状態とアクションを取得
+  // userProfileはストアの user ステートに対応します
+  const { user: userProfile, isLoading: loading, setUser, setLoading, logout } = useAuthStore();
 
-  // 1. 認証状態の監視
+  // 1. 認証状態とプロフィール情報のリアルタイム監視を一元化
   useEffect(() => {
+    let unsubscribeSnapshot: (() => void) | undefined;
+
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (!firebaseUser) {
-        setUserProfile(null);
+      // 既存のスナップショットリスナーがあれば解除（ユーザー切り替え時など）
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = undefined;
+      }
+
+      if (firebaseUser) {
+        // ログイン状態: Firestoreの監視を開始
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+
+        unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            // ストアを更新 (Firebase User情報とFirestore情報をマージ)
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              username: data.username || firebaseUser.displayName || "名無しさん",
+              weight: data.weight || null,
+              height: data.height || null,
+              profileImageUrl: data.profileImageUrl || firebaseUser.photoURL || null,
+              bio: data.bio || "",
+              blockedUsers: data.blockedUsers || [],
+              // その他必要なフィールドがあればここに追加
+              createdAt: data.createdAt,
+            } as any);
+          } else {
+            // ドキュメント未作成時
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              username: firebaseUser.displayName || "ゲスト",
+              blockedUsers: [],
+            } as any);
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("ユーザー情報の取得に失敗:", error);
+          setLoading(false);
+        });
+
+      } else {
+        // ログアウト状態
+        logout();
         setLoading(false);
       }
     });
-    return () => unsubscribeAuth();
-  }, []);
 
-  // 2. ユーザープロフィールのリアルタイム監視
-  useEffect(() => {
-    if (!user) return;
-    setLoading(true);
-    const userDocRef = doc(db, "users", user.uid);
-
-    const unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUserProfile({
-          uid: user.uid,
-          email: user.email,
-          username: data.username || user.displayName || "名無しさん",
-          weight: data.weight || null,
-          height: data.height || null,
-          profileImageUrl: data.profileImageUrl || user.photoURL || null,
-          bio: data.bio || "",
-          blockedUsers: data.blockedUsers || [],
-        });
-      } else {
-        setUserProfile({
-          uid: user.uid,
-          email: user.email,
-          username: user.displayName || "ゲスト",
-        });
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error("ユーザー情報の取得に失敗:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribeSnapshot();
-  }, [user]);
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
+  }, [setUser, setLoading, logout]);
 
   // Googleログイン処理
   const signInWithGoogle = async () => {
@@ -89,19 +95,19 @@ export const useAuth = () => {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       const idToken = userInfo.data?.idToken;
-      
+
       if (!idToken) throw new Error('Google ID Tokenが見つかりません');
 
       const credential = GoogleAuthProvider.credential(idToken);
       const result = await signInWithCredential(auth, credential);
       await checkAndCreateUserDoc(result.user);
-      
+
     } catch (error: any) {
       if (error.code === 'SIGN_IN_CANCELLED') {
         console.log('Google Sign-In cancelled');
       } else {
         console.error('Google Sign-In Error:', error);
-        alert('Googleログインに失敗しました');
+        // エラー表示はUI側で行うか、ここでAlertを出しても良い
       }
     }
   };
@@ -140,7 +146,6 @@ export const useAuth = () => {
         console.log('Apple Sign-In cancelled');
       } else {
         console.error('Apple Sign-In Error:', error);
-        alert('Appleログインに失敗しました');
       }
     }
   };
@@ -148,7 +153,7 @@ export const useAuth = () => {
   const checkAndCreateUserDoc = async (firebaseUser: User) => {
     const userRef = doc(db, "users", firebaseUser.uid);
     const docSnap = await getDoc(userRef);
-    
+
     if (!docSnap.exists()) {
       await setDoc(userRef, {
         username: firebaseUser.displayName || "名無しさん",
@@ -162,6 +167,8 @@ export const useAuth = () => {
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
+      // ストアのクリアはonAuthStateChangedのリスナー内で行われますが、念のため呼んでもOK
+      logout();
       try {
         await GoogleSignin.signOut();
       } catch (e) {
@@ -172,18 +179,21 @@ export const useAuth = () => {
     }
   };
 
-  // ★追加: アカウント削除（退会）機能
+  // アカウント削除（退会）機能
   const deleteAccount = async () => {
-    if (!user) return;
+    const currentUser = auth.currentUser; // 現在のユーザーを取得
+    if (!currentUser) return;
 
     try {
       // 1. Firestoreのユーザーデータを削除
-      await deleteDoc(doc(db, "users", user.uid));
-      
+      await deleteDoc(doc(db, "users", currentUser.uid));
+
       // 2. Firebase Authenticationのアカウント削除
-      // ※ 注意: ログインから時間が経っていると失敗するため、その場合は再ログインを促す
-      await deleteUser(user);
-      
+      await deleteUser(currentUser);
+
+      // 3. ストアの状態をクリア (onAuthStateChangedが検知して実行するが、明示的に行う)
+      logout();
+
     } catch (error: any) {
       console.error("Account deletion error:", error);
       if (error.code === 'auth/requires-recent-login') {
@@ -194,12 +204,13 @@ export const useAuth = () => {
   };
 
   return {
-    user,
-    userProfile,
+    user: auth.currentUser, // FirebaseのUserオブジェクトが必要な場合のために返す
+    userProfile,            // Zustandで管理されているリッチなプロフィール情報
     loading,
+    isAuthenticated: !!userProfile, // 認証済みかどうかのフラグ
     signOut,
     signInWithGoogle,
     signInWithApple,
-    deleteAccount, // ★これをリターンに追加したので、profile.tsxから呼び出せるようになります
+    deleteAccount,
   };
 };

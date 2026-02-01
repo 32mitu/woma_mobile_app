@@ -10,9 +10,11 @@ import { ExerciseSelector } from './ExerciseSelector';
 import { CreateExerciseTypeForm } from './CreateExerciseTypeForm';
 import { Ionicons } from '@expo/vector-icons';
 import { useHealthKit } from '../../../hooks/useHealthKit';
+import { useTranslation } from 'react-i18next'; // 追加: 多言語化フック
 
 export const RecordForm = () => {
   const router = useRouter();
+  const { t } = useTranslation(); // 追加: 翻訳関数の取得
   const { userProfile } = useAuth();
 
   const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
@@ -94,8 +96,8 @@ export const RecordForm = () => {
       const steps = await getTodaySteps();
 
       if (!steps || steps === 0) {
-        // 文言変更：情報源を明確に
-        Alert.alert("Appleヘルスケア", "今日の歩数データが見つかりませんでした。(または0歩)");
+        // 文言変更：情報源を明確に -> i18n対応
+        Alert.alert(t('record.healthAlertTitle'), t('record.healthNoData'));
         return;
       }
 
@@ -105,7 +107,8 @@ export const RecordForm = () => {
         const updated = [...activities];
         updated[walkIndex].steps = steps;
         setActivities(updated);
-        Alert.alert("Apple Health連携", `既存のウォーキング記録に ${steps.toLocaleString()}歩 を設定しました。`);
+        // i18n対応: 変数を埋め込み
+        Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessUpdate', { steps: steps.toLocaleString() }));
       } else {
         // マスタから「ウォーキング」を探す
         const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
@@ -138,12 +141,12 @@ export const RecordForm = () => {
           }
         };
         setActivities([...activities, newActivity]);
-        // 文言変更：情報源を明確に
-        Alert.alert("Apple Health連携", `ヘルスケアから ${steps.toLocaleString()}歩 を取得しました。`);
+        // 文言変更：情報源を明確に -> i18n対応
+        Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessNew', { steps: steps.toLocaleString() }));
       }
     } catch (error) {
       console.error("HealthKit Error:", error);
-      Alert.alert("エラー", "Appleヘルスケアデータの取得に失敗しました。設定 > プライバシー > ヘルスケア から権限を確認してください。");
+      Alert.alert(t('common.error'), t('record.healthError'));
     }
   };
 
@@ -154,7 +157,7 @@ export const RecordForm = () => {
 
   const handleSave = async () => {
     if (activities.length === 0 && !comment.trim() && imageUris.length === 0 && !weight) {
-      Alert.alert('エラー', '記録する内容（運動、体重、コメント、写真のいずれか）を入力してください');
+      Alert.alert(t('common.error'), t('record.validationError'));
       return;
     }
 
@@ -170,11 +173,11 @@ export const RecordForm = () => {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>今日の記録</Text>
+        <Text style={styles.pageTitle}>{t('record.todaysRecord')}</Text>
 
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <Text style={styles.sectionTitle}>運動メニュー</Text>
+            <Text style={styles.sectionTitle}>{t('record.exerciseMenu')}</Text>
 
             {/* ★修正: Androidの場合はボタンを表示しない */}
             {Platform.OS === 'ios' && (
@@ -190,7 +193,7 @@ export const RecordForm = () => {
                   <Ionicons name="heart" size={16} color="white" />
                 )}
                 <Text style={styles.healthButtonText}>
-                  {healthLoading ? '取得中...' : 'Appleヘルスケアから取得'}
+                  {healthLoading ? t('record.importing') : t('record.importHealth')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -199,12 +202,12 @@ export const RecordForm = () => {
           {/* ★修正: Androidの場合はクレジットも表示しない */}
           {Platform.OS === 'ios' && (
             <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
-              <Text style={styles.attributionText}>Data from Apple Health</Text>
+              <Text style={styles.attributionText}>{t('record.dataFromHealth')}</Text>
             </View>
           )}
 
           {activities.length === 0 ? (
-            <Text style={styles.emptyText}>まだ追加されていません</Text>
+            <Text style={styles.emptyText}>{t('record.noActivity')}</Text>
           ) : (
             activities.map((act, index) => (
               <ActivityInput
@@ -220,7 +223,7 @@ export const RecordForm = () => {
 
           <TouchableOpacity style={styles.addButton} onPress={handleAddActivity}>
             <Ionicons name="add" size={20} color="#3B82F6" />
-            <Text style={styles.addText}>運動を追加する</Text>
+            <Text style={styles.addText}>{t('record.addExercise')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -243,7 +246,7 @@ export const RecordForm = () => {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitText}>記録を保存</Text>
+            <Text style={styles.submitText}>{t('record.saveRecord')}</Text>
           )}
         </TouchableOpacity>
 
@@ -291,7 +294,7 @@ const styles = StyleSheet.create({
   healthButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FA586A', // Apple Healthに近いピンク/赤系の色に変更するとより分かりやすい(任意)
+    backgroundColor: '#FA586A', // Apple Healthに近いピンク/赤系の色
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,

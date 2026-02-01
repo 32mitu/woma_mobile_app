@@ -1,0 +1,62 @@
+{
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "save": "Save",
+        "saveFailed": "Failed to save.",
+        "menu": "Menu",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "report": "Report",
+        "block": "Block",
+        "reportTitle": "Reported",
+        "reportMessage": "Thank you for your report.",
+        "blockTitle": "Blocked",
+        "blockMessage": "You have blocked this user."
+    },
+    "tab": {
+        "home": "Home",
+        "record": "Record",
+        "profile": "Profile"
+    },
+    "record": {
+        "todaysRecord": "Today's Record",
+        "exerciseMenu": "Exercises",
+        "importHealth": "Import from Apple Health",
+        "importing": "Importing...",
+        "dataFromHealth": "Data from Apple Health",
+        "noActivity": "No activities added yet",
+        "addExercise": "Add Exercise",
+        "saveRecord": "Save Record",
+        "healthAlertTitle": "Apple Health Sync",
+        "healthNoData": "No steps data found for today (or 0 steps).",
+        "healthSuccessUpdate": "Updated existing walking record to {{steps}} steps.",
+        "healthSuccessNew": "Imported {{steps}} steps from Health.",
+        "healthError": "Failed to fetch Health data. Please check permissions in Settings > Privacy > Health.",
+        "validationError": "Please input at least one item (Exercise, Weight, Comment, or Photo)."
+    },
+    "profile": {
+        "editProfile": "Edit Profile",
+        "changePhoto": "Change Photo",
+        "username": "Username",
+        "usernamePlaceholder": "Username",
+        "bio": "Bio",
+        "bioPlaceholder": "Enter your bio",
+        "height": "Height",
+        "weight": "Weight",
+        "updateSuccess": "Profile updated successfully."
+    },
+    "timeline": {
+        "unknownUser": "Unknown User",
+        "deletedUser": "Deleted User",
+        "like": "Great!",
+        "comment": "Comment",
+        "menuReport": "Inappropriate content"
+    },
+    "notification": {
+        "likedTitle": "New Like!",
+        "likedBody": "{{user}} liked your post.",
+        "someone": "Someone"
+    }
+}
