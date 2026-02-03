@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, increment, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../../../../firebaseConfig';
 import { timeAgo } from '../utils/timelineUtils';
-import { Ionicons } from '@expo/vector-icons';
-import { usePushNotifications } from '../../../hooks/usePushNotifications'; // ★追加
+import { usePushNotifications } from '../../../hooks/usePushNotifications';
+
+// 共通コンポーネント
+import { Input } from '../../../ui/Input';
+import { IconButton } from '../../../ui/IconButton';
+import { Avatar } from '../../../ui/Avatar'; // コメントユーザーの画像用（あれば）
 
 type CommentSectionProps = {
   postId: string;
-  postAuthorId?: string; // ★追加
+  postAuthorId?: string;
   onCommentAdded?: () => void;
 };
 
 export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: CommentSectionProps) => {
-  const { sendPushNotification } = usePushNotifications(); // ★追加
+  const { sendPushNotification } = usePushNotifications();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState("");
@@ -28,94 +32,137 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
       setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
-    return unsubscribe;
+    return () => unsubscribe();
   }, [postId]);
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    if (!auth.currentUser) return Alert.alert("エラー", "ログインが必要です");
-
     setSubmitting(true);
-    try {
-      const user = auth.currentUser;
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const userData = userDoc.data();
-      const currentUserName = userData?.username || "匿名";
+    const user = auth.currentUser;
 
+    try {
+      // 1. コメントをサブコレクションに追加
       await addDoc(collection(db, "timeline", postId, "comments"), {
+        userId: user?.uid,
+        username: user?.displayName || "名無し",
+        userPhoto: user?.photoURL || null, // アイコン表示用に保存
         text: inputText.trim(),
-        userId: user.uid,
-        username: currentUserName,
-        userAvatar: userData?.profileImageUrl || null,
         createdAt: serverTimestamp(),
-        likes: 0,
       });
 
-      await updateDoc(doc(db, "timeline", postId), {
+      // 2. 投稿本体のコメント数をインクリメント
+      const postRef = doc(db, "timeline", postId);
+      await updateDoc(postRef, {
         comments: increment(1)
       });
 
-      // ★追加: ② コメント通知を送信 (自分自身の投稿でなければ)
-      if (postAuthorId && postAuthorId !== user.uid) {
-        sendPushNotification(
-          postAuthorId,
-          "新しいコメント",
-          `${currentUserName}さんがコメントしました: ${inputText.trim()}`,
-          { type: 'comment', postId: postId }
-        );
+      // 3. 通知送信 (自分以外の投稿へのコメント時)
+      if (postAuthorId && postAuthorId !== user?.uid) {
+        const authorDoc = await getDoc(doc(db, "users", postAuthorId));
+        if (authorDoc.exists()) {
+          const authorData = authorDoc.data();
+          if (authorData.pushToken) {
+            await sendPushNotification(
+              authorData.pushToken,
+              "新しいコメント",
+              `${user?.displayName || "誰か"}があなたの投稿にコメントしました: ${inputText.trim()}`
+            );
+          }
+        }
       }
 
       setInputText("");
-      
-      if (onCommentAdded) {
-        onCommentAdded();
-      }
-
+      onCommentAdded?.();
     } catch (error) {
-      console.error(error);
-      Alert.alert("エラー", "コメントの送信に失敗しました");
+      console.error("Error adding comment: ", error);
+      Alert.alert("エラー", "コメントの送信に失敗しました。");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <ActivityIndicator size="small" />;
-
   return (
     <View style={styles.container}>
-      {comments.map((item) => (
-        <View key={item.id} style={styles.commentItem}>
-          <Text style={styles.commentHeader}>
-            <Text style={styles.username}>{item.username}</Text>
-            <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : '今'}</Text>
-          </Text>
-          <Text style={styles.commentText}>{item.text}</Text>
-        </View>
-      ))}
+      {loading ? (
+        <ActivityIndicator size="small" color="#3B82F6" style={{ marginVertical: 10 }} />
+      ) : (
+        comments.map((item) => (
+          <View key={item.id} style={styles.commentItem}>
+            {/* 共通Avatarを使用 */}
+            <Avatar uri={item.userPhoto} size="sm" style={styles.avatar} />
+            <View style={styles.commentContent}>
+              <View style={styles.commentHeader}>
+                <Text style={styles.username}>{item.username}</Text>
+                <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : '今'}</Text>
+              </View>
+              <Text style={styles.commentText}>{item.text}</Text>
+            </View>
+          </View>
+        ))
+      )}
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
+      {/* 共通Inputコンポーネントを使用 */}
+      <View style={styles.inputWrapper}>
+        <Input
           placeholder="コメントを入力..."
           value={inputText}
           onChangeText={setInputText}
           multiline
+          containerStyle={{ marginBottom: 0 }} // Inputのデフォルトマージンを打ち消し
+          // 送信ボタンをInputの中に配置
+          rightElement={
+            <IconButton
+              name="send"
+              size={20}
+              color={inputText.trim() ? "#3B82F6" : "#ccc"}
+              onPress={handleSend}
+              disabled={submitting || !inputText.trim()}
+            />
+          }
         />
-        <TouchableOpacity onPress={handleSend} disabled={submitting || !inputText.trim()}>
-          <Ionicons name="send" size={20} color={inputText.trim() ? "#3B82F6" : "#ccc"} />
-        </TouchableOpacity>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 8 },
-  commentItem: { marginBottom: 12, paddingHorizontal: 4 },
-  commentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  username: { fontWeight: 'bold', fontSize: 13, color: '#333' },
-  date: { fontSize: 11, color: '#888' },
-  commentText: { fontSize: 14, color: '#444', lineHeight: 20 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
-  input: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
+  container: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  avatar: {
+    marginRight: 10,
+  },
+  commentContent: {
+    flex: 1,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  username: {
+    fontWeight: 'bold',
+    fontSize: 13,
+    color: '#333',
+  },
+  date: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  commentText: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+  },
+  inputWrapper: {
+    marginTop: 8,
+  },
 });

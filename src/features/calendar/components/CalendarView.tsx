@@ -5,8 +5,9 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
 import { CalendarBottomSheet } from './CalendarBottomSheet';
+// 共通コンポーネント
+import { Card } from '../../../ui/Card';
 
-// 日本語化設定
 LocaleConfig.locales['jp'] = {
   monthNames: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   monthNamesShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
@@ -24,53 +25,38 @@ export const CalendarView = () => {
   const [isModalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
-    const fetchRecords = async () => {
-      // ★ 修正: ユーザー情報がまだない場合でも、一旦ローディングは終了させる
-      if (!userProfile?.uid) {
-        setLoading(false);
-        return;
-      }
+    if (!userProfile?.uid) return;
 
+    const fetchMonthlyData = async () => {
       try {
-        // 自分の記録を全て取得
-        // ※ useRecordSaver.ts で保存先を "exerciseRecords" にした場合はそれに合わせる
         const q = query(
           collection(db, 'exerciseRecords'),
           where('userId', '==', userProfile.uid)
         );
-        
         const snapshot = await getDocs(q);
         const marks: any = {};
 
-        snapshot.docs.forEach(doc => {
+        snapshot.forEach(doc => {
           const data = doc.data();
-          if (data.createdAt?.toDate) {
+          if (data.createdAt) {
             const date = data.createdAt.toDate();
-            // YYYY-MM-DD 形式に変換 (タイムゾーンのズレ対策で簡易的に文字列化)
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const dateString = `${year}-${month}-${day}`;
-            
-            // マークをつける
-            marks[dateString] = {
+            const dateStr = date.toISOString().split('T')[0];
+            marks[dateStr] = {
               marked: true,
               dotColor: '#3B82F6',
             };
           }
         });
-
         setMarkedDates(marks);
       } catch (error) {
-        console.error("カレンダーデータ取得エラー:", error);
+        console.error("Error fetching calendar data:", error);
       } finally {
-        // ★ 修正: 成功しても失敗しても、必ずローディングを終わらせる
         setLoading(false);
       }
     };
 
-    fetchRecords();
-  }, [userProfile]);
+    fetchMonthlyData();
+  }, [userProfile?.uid]);
 
   const handleDayPress = (day: any) => {
     setSelectedDate(day.dateString);
@@ -82,9 +68,9 @@ export const CalendarView = () => {
   }
 
   return (
-    <View style={styles.container}>
+    // カレンダー全体を共通のCardでラップ
+    <Card style={styles.container}>
       <Calendar
-        // 今日の日付をセット
         current={new Date().toISOString().split('T')[0]}
         markedDates={markedDates}
         theme={{
@@ -96,38 +82,33 @@ export const CalendarView = () => {
         }}
         onDayPress={handleDayPress}
       />
-      
+
       <View style={styles.legend}>
         <View style={styles.dot} />
         <Text style={styles.legendText}>記録がある日</Text>
       </View>
 
-      <CalendarBottomSheet 
-        isVisible={isModalVisible} 
-        onClose={() => setModalVisible(false)} 
-        selectedDate={selectedDate} 
+      <CalendarBottomSheet
+        isVisible={isModalVisible}
+        onClose={() => setModalVisible(false)}
+        selectedDate={selectedDate}
       />
-    </View>
+    </Card>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
-    borderRadius: 16,
+    // Cardのデフォルトパディングや影を使用するため、独自スタイルは最小限に
     padding: 10,
     marginVertical: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   legend: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     marginTop: 10,
-    paddingBottom: 5,
+    paddingRight: 10,
   },
   dot: {
     width: 8,
@@ -137,7 +118,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   legendText: {
-    color: '#666',
     fontSize: 12,
+    color: '#666',
   },
 });

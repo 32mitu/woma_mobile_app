@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { PieChart } from "react-native-gifted-charts";
+import { Card } from '../../../ui/Card';
 
 type Props = {
   exerciseRecords: any[];
@@ -8,7 +9,6 @@ type Props = {
 };
 
 export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
-  // --- カロリー計算ロジック ---
   const calculateCalories = (records: any[], weight: number) => {
     if (!weight) return [];
 
@@ -20,71 +20,55 @@ export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
     };
 
     records.forEach(record => {
-      // 新データ形式 (activities配列)
       if (record.activities && record.activities.length > 0) {
         record.activities.forEach((activity: any) => {
           let durationHours = 0;
-
-          // 1. 時間(分)が入力されている場合
           if (activity.duration > 0) {
             durationHours = activity.duration / 60;
-          } 
-          // 2. 時間は0だが、歩数(steps)がある場合 (★追加ロジック)
-          else if (activity.steps && activity.steps > 0) {
-            // 仮定: 1分 = 100歩 (6000歩 = 1時間) として時間を逆算
-            durationHours = activity.steps / 6000;
+          } else if (activity.steps > 0) {
+            durationHours = (activity.steps * 0.0008) / 4;
           }
-
-          if (durationHours > 0) {
-            // METs値があれば使う、なければデフォルト3 (ウォーキング相当)
-            const metValue = activity.mets || 3;
-            
-            // カロリー計算式: METs * 時間 * 体重 * 1.05
-            const calories = metValue * durationHours * weight * 1.05;
-
-            const name = activity.name || '不明';
-            caloriesByActivity[name] = (caloriesByActivity[name] || 0) + calories;
+          const mets = Number(activity.mets || 3);
+          const cal = mets * weight * durationHours * 1.05;
+          if (cal > 0) {
+            const name = activity.name || 'その他';
+            caloriesByActivity[name] = (caloriesByActivity[name] || 0) + cal;
           }
         });
-      } 
-      // 旧データ形式 (フォールバック)
-      else {
-        ['running', 'walking', 'training'].forEach(type => {
-          if (record[type] && record[type].duration > 0) {
-            const durationHours = record[type].duration / 60;
-            const intensity = record[type].intensity || '中'; 
-            const metValue = oldMets[type]?.[intensity] || 3;
-            const calories = metValue * durationHours * weight * 1.05;
-            
-            const nameMap: any = { running: 'ランニング', walking: 'ウォーキング', training: '筋トレ' };
-            const name = nameMap[type];
-            caloriesByActivity[name] = (caloriesByActivity[name] || 0) + calories;
-          }
-        });
+      } else if (record.type) {
+        // 旧データ形式対応
+        let durationHours = record.duration / 60;
+        const typeMets = oldMets[record.type] || { "中": 3 };
+        const mets = typeMets[record.intensity || "中"] || 3;
+        const cal = mets * weight * durationHours * 1.05;
+        if (cal > 0) {
+          const name = record.type;
+          caloriesByActivity[name] = (caloriesByActivity[name] || 0) + cal;
+        }
       }
     });
 
-    // グラフ用データ配列に変換
-    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
-    return Object.keys(caloriesByActivity).map((key, index) => ({
-      value: Math.round(caloriesByActivity[key]),
-      text: `${Math.round(caloriesByActivity[key])}`,
-      label: key, // 凡例用
-      color: colors[index % colors.length],
-    })).filter(item => item.value > 0);
+    const total = Object.values(caloriesByActivity).reduce((a, b) => a + b, 0);
+    const chartData = Object.keys(caloriesByActivity).map((key, index) => ({
+      value: caloriesByActivity[key],
+      text: `${Math.round((caloriesByActivity[key] / total) * 100)}%`,
+      color: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'][index % 5],
+      name: key,
+    }));
+
+    return chartData.filter(d => d.value > 0);
   };
 
   const chartData = calculateCalories(exerciseRecords, userWeight);
-  const totalCalories = chartData.reduce((sum, item) => sum + item.value, 0);
+  const totalCalories = Math.round(chartData.reduce((acc, cur) => acc + cur.value, 0));
 
-  // 凡例コンポーネント
   const renderLegend = () => {
     return (
-      <View style={styles.legendContainer}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 20 }}>
         {chartData.map((item, index) => (
-          <View key={index} style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>{item.label}: {item.value}kcal</Text>
+          <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16, marginBottom: 8 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color, marginRight: 6 }} />
+            <Text style={{ color: '#666', fontSize: 12 }}>{item.name}</Text>
           </View>
         ))}
       </View>
@@ -92,11 +76,11 @@ export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
   };
 
   if (totalCalories === 0) {
-    return null; // データがなければ表示しない
+    return null;
   }
 
   return (
-    <View style={styles.container}>
+    <Card style={styles.container}>
       <Text style={styles.title}>消費カロリー内訳</Text>
       <View style={styles.chartWrapper}>
         <PieChart
@@ -118,22 +102,14 @@ export const CalorieChart = ({ exerciseRecords, userWeight }: Props) => {
         />
       </View>
       {renderLegend()}
-    </View>
+    </Card>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
     marginBottom: 16,
-    elevation: 2,
   },
   title: { fontSize: 16, fontWeight: 'bold', marginBottom: 16, color: '#333' },
-  chartWrapper: { alignItems: 'center', marginBottom: 16 },
-  legendContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 },
-  legendItem: { flexDirection: 'row', alignItems: 'center' },
-  legendColor: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-  legendText: { fontSize: 12, color: '#555' },
+  chartWrapper: { alignItems: 'center' },
 });

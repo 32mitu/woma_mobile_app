@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
 import { useRecordSaver } from '../useRecordSaver';
@@ -10,11 +10,15 @@ import { ExerciseSelector } from './ExerciseSelector';
 import { CreateExerciseTypeForm } from './CreateExerciseTypeForm';
 import { Ionicons } from '@expo/vector-icons';
 import { useHealthKit } from '../../../hooks/useHealthKit';
-import { useTranslation } from 'react-i18next'; // 追加: 多言語化フック
+import { useTranslation } from 'react-i18next';
+
+// 共通コンポーネント
+import { Button } from '../../../ui/Button';
+import { Card } from '../../../ui/Card';
 
 export const RecordForm = () => {
   const router = useRouter();
-  const { t } = useTranslation(); // 追加: 翻訳関数の取得
+  const { t } = useTranslation();
   const { userProfile } = useAuth();
 
   const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
@@ -30,33 +34,27 @@ export const RecordForm = () => {
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
 
-  // 体重の決定 (入力値優先、なければプロフィール)
+  // 体重の決定
   const effectiveWeight = weight || (userProfile?.weight ? String(userProfile.weight) : '');
 
   const handleAddActivity = () => {
     setSelectorVisible(true);
   };
 
-  // ★修正ポイント: データ構造の違いを吸収するロジック
   const handleSelectExercise = (type: any) => {
     let lowVal, midVal, highVal;
-
-    // パターンA: metsValues オブジェクトを持っている場合 (デフォルトのマスタデータなど)
     if (type.metsValues) {
       lowVal = type.metsValues['低'];
       midVal = type.metsValues['中'];
       highVal = type.metsValues['高'];
-    }
-    // パターンB: フラットな構造の場合 (自分で作ったカスタム運動など)
-    else {
+    } else {
       lowVal = type.low;
       midVal = type.mid;
       highVal = type.high;
     }
 
-    // 数値変換と安全策 (NaNならデフォルト値へ)
     const low = parseFloat(lowVal) || 3.0;
-    const mid = parseFloat(midVal) || 3.5; // ここで正しい値 (例: ウォーキングなら4) が入る
+    const mid = parseFloat(midVal) || 3.5;
     const high = parseFloat(highVal) || 5.0;
 
     setActivities([
@@ -67,7 +65,7 @@ export const RecordForm = () => {
         intensity: '中',
         duration: 30,
         steps: 0,
-        mets: mid, // デフォルト強度「中」のMETsをセット
+        mets: mid,
         baseMets: { low, mid, high }
       }
     ]);
@@ -77,9 +75,7 @@ export const RecordForm = () => {
   const handleUpdateActivity = (id: string, field: string, value: any) => {
     setActivities(activities.map(act => {
       if (act.id !== id) return act;
-
       if (field === 'intensity') {
-        // 強度が変わったらMETsも更新
         const newMets = act.baseMets[value === '低' ? 'low' : value === '高' ? 'high' : 'mid'] ?? 3.5;
         return { ...act, intensity: value, mets: newMets };
       }
@@ -94,9 +90,7 @@ export const RecordForm = () => {
   const handleImportHealthData = async () => {
     try {
       const steps = await getTodaySteps();
-
       if (!steps || steps === 0) {
-        // 文言変更：情報源を明確に -> i18n対応
         Alert.alert(t('record.healthAlertTitle'), t('record.healthNoData'));
         return;
       }
@@ -107,25 +101,14 @@ export const RecordForm = () => {
         const updated = [...activities];
         updated[walkIndex].steps = steps;
         setActivities(updated);
-        // i18n対応: 変数を埋め込み
         Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessUpdate', { steps: steps.toLocaleString() }));
       } else {
-        // マスタから「ウォーキング」を探す
         const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
-
-        // ウォーキングのMETsを取得 (なければデフォルト)
-        let wLow = 3.0, wMid = 3.5, wHigh = 4.0;
-        if (walkType) {
-          if (walkType.metsValues) {
-            wLow = walkType.metsValues['低'] || 3.0;
-            wMid = walkType.metsValues['中'] || 3.5;
-            wHigh = walkType.metsValues['高'] || 4.0;
-          } else {
-            wLow = walkType.low || 3.0;
-            wMid = walkType.mid || 3.5;
-            wHigh = walkType.high || 4.0;
-          }
-        }
+        // ... (省略: METs取得ロジック) ...
+        // 既存のロジックと同じ
+        const wLow = walkType?.metsValues?.['低'] || walkType?.low || 3.0;
+        const wMid = walkType?.metsValues?.['中'] || walkType?.mid || 3.5;
+        const wHigh = walkType?.metsValues?.['高'] || walkType?.high || 4.0;
 
         const newActivity = {
           id: Date.now().toString(),
@@ -134,14 +117,9 @@ export const RecordForm = () => {
           duration: 0,
           steps: steps,
           mets: Number(wMid),
-          baseMets: {
-            low: Number(wLow),
-            mid: Number(wMid),
-            high: Number(wHigh),
-          }
+          baseMets: { low: Number(wLow), mid: Number(wMid), high: Number(wHigh) }
         };
         setActivities([...activities, newActivity]);
-        // 文言変更：情報源を明確に -> i18n対応
         Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessNew', { steps: steps.toLocaleString() }));
       }
     } catch (error) {
@@ -160,51 +138,35 @@ export const RecordForm = () => {
       Alert.alert(t('common.error'), t('record.validationError'));
       return;
     }
-
-    await saveRecord({
-      activities,
-      weight,
-      comment,
-      imageUris,
-      postToTimeline
-    });
+    await saveRecord({ activities, weight, comment, imageUris, postToTimeline });
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.pageTitle}>{t('record.todaysRecord')}</Text>
 
-        <View style={styles.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <Text style={styles.sectionTitle}>{t('record.exerciseMenu')}</Text>
-
-            {/* ★修正: Androidの場合はボタンを表示しない */}
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={styles.healthButton}
-                onPress={handleImportHealthData}
-                disabled={healthLoading}
-              >
-                {healthLoading ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  // アイコンをハートマークに変更 (HealthKitらしさの強調)
-                  <Ionicons name="heart" size={16} color="white" />
-                )}
-                <Text style={styles.healthButtonText}>
-                  {healthLoading ? t('record.importing') : t('record.importHealth')}
-                </Text>
-              </TouchableOpacity>
-            )}
+        {/* ヘルスケア連携ボタン (iOSのみ) */}
+        {Platform.OS === 'ios' && (
+          <View style={styles.headerButtons}>
+            <Button
+              title={healthLoading ? t('record.importing') : t('record.importHealth')}
+              onPress={handleImportHealthData}
+              loading={healthLoading}
+              icon={<Ionicons name="heart" size={16} color="white" />}
+              // 共通ボタンのレイアウトを活かしつつ、色と角丸だけ上書き
+              style={styles.healthButton}
+              textStyle={styles.healthButtonText}
+            />
+            <Text style={styles.attributionText}>{t('record.dataFromHealth')}</Text>
           </View>
+        )}
 
-          {/* ★修正: Androidの場合はクレジットも表示しない */}
-          {Platform.OS === 'ios' && (
-            <View style={{ alignItems: 'flex-end', marginBottom: 12 }}>
-              <Text style={styles.attributionText}>{t('record.dataFromHealth')}</Text>
-            </View>
-          )}
+        {/* 運動リスト */}
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('record.exerciseMenu')}</Text>
+          </View>
 
           {activities.length === 0 ? (
             <Text style={styles.emptyText}>{t('record.noActivity')}</Text>
@@ -221,49 +183,52 @@ export const RecordForm = () => {
             ))
           )}
 
-          <TouchableOpacity style={styles.addButton} onPress={handleAddActivity}>
-            <Ionicons name="add" size={20} color="#3B82F6" />
-            <Text style={styles.addText}>{t('record.addExercise')}</Text>
-          </TouchableOpacity>
-        </View>
+          <Button
+            title={t('record.addExercise')}
+            variant="outline"
+            icon={<Ionicons name="add" size={20} color="#3B82F6" />}
+            onPress={handleAddActivity}
+            // styleでflexなどを再定義せず、Button内部に任せる
+            style={styles.addButton}
+          />
+        </Card>
 
-        <RecordFormInputs
-          weight={weight}
-          setWeight={setWeight}
-          comment={comment}
-          setComment={setComment}
-          imageUris={imageUris}
-          setImageUris={setImageUris}
-          postToTimeline={postToTimeline}
-          setPostToTimeline={setPostToTimeline}
-        />
+        {/* 入力フォーム */}
+        <Card style={styles.section}>
+          <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{t('record.weight')}</Text>
+          <RecordFormInputs
+            weight={weight}
+            setWeight={setWeight}
+            comment={comment}
+            setComment={setComment}
+            imageUris={imageUris}
+            setImageUris={setImageUris}
+            postToTimeline={postToTimeline}
+            setPostToTimeline={setPostToTimeline}
+          />
+        </Card>
 
-        <TouchableOpacity
-          style={[styles.submitButton, saving && styles.disabled]}
+        {/* 保存ボタン */}
+        <Button
+          title={t('record.saveRecord')}
           onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitText}>{t('record.saveRecord')}</Text>
-          )}
-        </TouchableOpacity>
-
+          loading={saving}
+          variant="primary"
+          // Buttonのvariant="primary"に影が含まれているため、追加のstyleは最小限にする
+          style={styles.submitButton}
+          textStyle={{ fontSize: 18 }}
+        />
       </ScrollView>
 
+      {/* モーダル */}
       <ExerciseSelector
         visible={selectorVisible}
         availableTypes={availableTypes}
         onClose={() => setSelectorVisible(false)}
         onSelect={handleSelectExercise}
-        onCreateNew={() => {
-          setSelectorVisible(false);
-          setCreateVisible(true);
-        }}
+        onCreateNew={() => { setSelectorVisible(false); setCreateVisible(true); }}
         onDelete={deleteExerciseType}
       />
-
       <CreateExerciseTypeForm
         visible={createVisible}
         onSubmit={handleCreateSubmit}
@@ -274,42 +239,67 @@ export const RecordForm = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  pageTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#333' },
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
-  emptyText: { textAlign: 'center', color: '#9CA3AF', marginBottom: 12, fontSize: 14 },
-  addButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 14, borderWidth: 1, borderColor: '#3B82F6', borderRadius: 12,
-    borderStyle: 'dashed', backgroundColor: '#EFF6FF'
+  container: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
   },
-  addText: { color: '#3B82F6', fontWeight: 'bold', marginLeft: 8 },
-  submitButton: {
-    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10,
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
   },
-  disabled: { backgroundColor: '#93C5FD' },
-  submitText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#1F2937'
+  },
+  section: {
+    marginTop: 24
+  },
+  sectionHeader: {
+    marginBottom: 12
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937'
+  },
+  // ヘッダーボタン周り
+  headerButtons: {
+    marginBottom: 20,
+    alignItems: 'flex-start'
+  },
   healthButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FA586A', // Apple Healthに近いピンク/赤系の色
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    backgroundColor: '#FA586A', // 専用色
     borderRadius: 20,
-    gap: 4,
+    borderWidth: 0,
+    // paddingやflex系はButtonコンポーネントのデフォルトを使用
   },
   healthButtonText: {
-    color: 'white',
     fontSize: 12,
-    fontWeight: 'bold',
   },
-  // 新規追加スタイル
   attributionText: {
     fontSize: 10,
-    color: '#999',
-    marginTop: 2,
-    marginRight: 4
-  }
+    color: '#9CA3AF',
+    marginTop: 4,
+    marginLeft: 4
+  },
+  // リスト周り
+  emptyText: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    marginVertical: 12,
+    fontSize: 14
+  },
+  addButton: {
+    marginTop: 12,
+    borderStyle: 'dashed', // outlineバリアントに追加するスタイルのみ記述
+    backgroundColor: '#EFF6FF',
+  },
+  submitButton: {
+    marginTop: 24,
+    marginBottom: 40,
+    // variant="primary"で影がついているため、ここでは余白のみ調整
+  },
 });

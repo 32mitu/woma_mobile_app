@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, Alert,
-  Dimensions, ScrollView
-} from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Alert } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
 import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../../../firebaseConfig';
+import { db, auth } from '../../../../firebaseConfig';
 import { RenderTextWithHashtags, timeAgo } from '../utils/timelineUtils';
 import { CommentSection } from './CommentSection';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../auth/useAuth';
-import { useSafety } from '../../../hooks/useSafety';
 import { usePushNotifications } from '../../../hooks/usePushNotifications';
-import { useTranslation } from 'react-i18next'; // 追加
+import { useTranslation } from 'react-i18next';
+
+// 共通コンポーネント
+import { Card } from '../../../ui/Card';
+import { Avatar } from '../../../ui/Avatar';
+import { IconButton } from '../../../ui/IconButton';
+import { Badge } from '../../../ui/Badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,6 +26,10 @@ type PostProps = {
     likes: number;
     comments?: number;
     timestamp: any;
+    user?: { // 投稿者情報がpostオブジェクトに含まれている場合への対応
+      displayName?: string;
+      photoURL?: string;
+    };
     activities?: {
       name: string;
       duration: number;
@@ -37,256 +41,272 @@ type PostProps = {
 
 export const Post = ({ post }: PostProps) => {
   const router = useRouter();
-  const { t } = useTranslation(); // 追加
-  const { userProfile } = useAuth();
-  const { reportContent, blockUser } = useSafety();
+  const { t } = useTranslation();
   const { sendPushNotification } = usePushNotifications();
 
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.likes);
+  const [likes, setLikes] = useState(post.likes || 0);
+  const [commentsCount, setCommentsCount] = useState(post.comments || 0);
+  const [liked, setLiked] = useState(false); // 本来はサブコレクションで確認すべきだが簡易実装
   const [showComments, setShowComments] = useState(false);
-  const [activePage, setActivePage] = useState(0);
+  const [author, setAuthor] = useState<{ name: string; photo: string | null }>({
+    name: post.user?.displayName || "ユーザー",
+    photo: post.user?.photoURL || null
+  });
 
-  const [authorName, setAuthorName] = useState(t('common.loading'));
-  const [authorAvatar, setAuthorAvatar] = useState<string | null>(null);
+  const currentUser = auth.currentUser;
+  const isMyPost = currentUser?.uid === post.userId;
 
   useEffect(() => {
-    const fetchAuthorProfile = async () => {
-      if (!post.userId) {
-        setAuthorName(t('timeline.unknownUser'));
-        return;
-      }
-
-      try {
-        const userDocRef = doc(db, 'users', post.userId);
-        const userDoc = await getDoc(userDocRef);
-
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setAuthorName(data.username || data.displayName || "名無し");
-          setAuthorAvatar(data.profileImageUrl || data.photoURL || null);
-        } else {
-          setAuthorName(t('timeline.deletedUser'));
+    // 投稿者情報の取得 (postに情報が含まれていない場合のフォールバック)
+    const fetchAuthor = async () => {
+      if (post.user) return; // 既に情報があればスキップ
+      if (post.userId) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", post.userId));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setAuthor({
+              name: data.displayName || data.username || "ユーザー",
+              photo: data.profileImageUrl || data.photoURL || null
+            });
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (error) {
-        console.error("User fetch error:", error);
-        setAuthorName(t('common.error'));
       }
     };
-
-    fetchAuthorProfile();
-  }, [post.userId]);
-
-  const handlePressProfile = () => {
-    if (post.userId) {
-      router.push(`/public/${post.userId}` as any);
-    }
-  };
+    fetchAuthor();
+  }, [post.userId, post.user]);
 
   const handleLike = async () => {
-    if (!userProfile) return;
-    const postRef = doc(db, "timeline", post.id);
     const newLiked = !liked;
     setLiked(newLiked);
-    setLikeCount(prev => newLiked ? prev + 1 : prev - 1);
+    setLikes((prev) => (newLiked ? prev + 1 : prev - 1));
 
     try {
-      if (newLiked) {
-        await updateDoc(postRef, { likes: increment(1) });
+      const postRef = doc(db, "timeline", post.id);
+      await updateDoc(postRef, {
+        likes: increment(newLiked ? 1 : -1)
+      });
 
-        if (post.userId && post.userId !== userProfile.uid) {
-          sendPushNotification(
-            post.userId,
-            t('notification.likedTitle'),
-            t('notification.likedBody', { user: userProfile.username || t('notification.someone') }),
-            { type: 'like', postId: post.id }
-          );
+      if (newLiked && post.userId && post.userId !== currentUser?.uid) {
+        const authorDoc = await getDoc(doc(db, "users", post.userId));
+        if (authorDoc.exists()) {
+          const authorData = authorDoc.data();
+          if (authorData.pushToken) {
+            await sendPushNotification(
+              authorData.pushToken,
+              "いいね！",
+              `${currentUser?.displayName || "誰か"}があなたの投稿にいいねしました`
+            );
+          }
         }
-      } else {
-        await updateDoc(postRef, { likes: increment(-1) });
       }
     } catch (error) {
+      console.error("Error updating like: ", error);
+      // ロールバック
       setLiked(!newLiked);
-      setLikeCount(prev => newLiked ? prev - 1 : prev + 1);
+      setLikes((prev) => (newLiked ? prev - 1 : prev + 1));
     }
   };
 
-  const handleOptions = () => {
-    if (!userProfile) return;
-    const isMyPost = userProfile.uid === post.userId;
-    const options = isMyPost
-      ? [{ text: t('common.delete'), style: 'destructive', onPress: handleDelete }]
-      : [
-        { text: t('common.report'), style: 'destructive', onPress: () => handleReport() },
-        { text: t('common.block'), style: 'destructive', onPress: () => handleBlock() }
-      ];
-
-    Alert.alert(t('common.menu'), '', [...options as any, { text: t('common.cancel'), style: 'cancel' }]);
+  const handleDelete = () => {
+    Alert.alert("削除の確認", "この投稿を削除しますか？", [
+      { text: "キャンセル", style: "cancel" },
+      {
+        text: "削除",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "timeline", post.id));
+          } catch (e) {
+            Alert.alert("エラー", "削除に失敗しました");
+          }
+        }
+      }
+    ]);
   };
 
-  const handleDelete = async () => {
-    try {
-      await deleteDoc(doc(db, "timeline", post.id));
-    } catch (e) {
-      Alert.alert(t('common.error'), "削除に失敗しました"); // サーバーエラーメッセージ等はそのままの場合も
-    }
-  };
-
-  const handleReport = async () => {
-    await reportContent(post.id, 'post', t('timeline.menuReport'));
-    Alert.alert(t('common.reportTitle'), t('common.reportMessage'));
-  };
-
-  const handleBlock = async () => {
+  const handleUserPress = () => {
     if (post.userId) {
-      await blockUser(post.userId);
-      Alert.alert(t('common.blockTitle'), t('common.blockMessage'));
-    }
-  };
-
-  const handleScroll = (event: any) => {
-    const slide = Math.ceil(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
-    if (slide !== activePage) {
-      setActivePage(slide);
+      router.push(`/public/${post.userId}`);
     }
   };
 
   return (
-    <View style={styles.card}>
+    <Card padding="none" style={styles.card}>
+      {/* ヘッダー */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handlePressProfile} style={styles.userInfo}>
-          {authorAvatar ? (
-            <Image
-              source={{ uri: authorAvatar }}
-              style={styles.avatar}
-              contentFit="cover"
-              transition={500}
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Ionicons name="person" size={20} color="#9ca3af" />
-            </View>
-          )}
-          <View>
-            <Text style={styles.username}>{authorName}</Text>
-            <Text style={styles.date}>{timeAgo(post.timestamp)}</Text>
+        <View style={styles.userInfo} onTouchEnd={handleUserPress}>
+          <Avatar uri={author.photo} size="sm" />
+          <View style={styles.texts}>
+            <Text style={styles.username}>{author.name}</Text>
+            <Text style={styles.date}>
+              {post.timestamp ? timeAgo(post.timestamp) : '投稿中...'}
+            </Text>
           </View>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity onPress={handleOptions} style={styles.moreButton}>
-          <Ionicons name="ellipsis-horizontal" size={20} color="#9ca3af" />
-        </TouchableOpacity>
+        {isMyPost && (
+          <IconButton
+            name="trash-outline"
+            size={20}
+            color="#EF4444"
+            onPress={handleDelete}
+          />
+        )}
       </View>
 
-      {post.activities && post.activities.length > 0 && (
-        <View style={styles.activityContainer}>
-          {post.activities.map((act, index) => (
-            <View key={index} style={styles.activityBadge}>
-              <Text style={styles.activityText}>
-                🏃 {act.name} {act.duration}分
-                {act.steps ? ` (${act.steps.toLocaleString()}歩)` : ''}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
+      {/* 本文 */}
       <View style={styles.content}>
         <RenderTextWithHashtags text={post.text} />
       </View>
 
+      {/* 活動タグ (Badgeを使用) */}
+      {post.activities && post.activities.length > 0 && (
+        <View style={styles.activityContainer}>
+          {post.activities.map((act, idx) => (
+            <Badge
+              key={idx}
+              label={`${act.name} ${act.duration > 0 ? act.duration + '分' : (act.steps || 0) + '歩'}`}
+              variant="outline"
+              color="primary"
+              size="sm"
+            />
+          ))}
+        </View>
+      )}
+
+      {/* 画像 */}
       {post.imageUrls && post.imageUrls.length > 0 && (
         <View style={styles.imageWrapper}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            style={styles.imageScroll}
-          >
-            {post.imageUrls.map((url, index) => (
-              <Image
-                key={index}
-                source={{ uri: url }}
-                style={styles.postImage}
-                contentFit="cover"
-                transition={500}
-                cachePolicy="memory-disk"
-              />
-            ))}
-          </ScrollView>
-
+          <Image
+            source={{ uri: post.imageUrls[0] }}
+            style={styles.postImage}
+            contentFit="cover"
+            transition={500}
+          />
+          {/* 複数枚ある場合のインジケーターなどは省略またはBadgeで実装可能 */}
           {post.imageUrls.length > 1 && (
-            <View style={styles.pagination}>
-              {post.imageUrls.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    index === activePage ? styles.activeDot : styles.inactiveDot
-                  ]}
-                />
-              ))}
+            <View style={styles.imageCounter}>
+              <Badge label={`1 / ${post.imageUrls.length}`} variant="ghost" color="secondary" />
             </View>
           )}
         </View>
       )}
 
+      {/* フッターアクション (IconButtonを使用) */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-          <Ionicons
+        <View style={styles.actionItem}>
+          <IconButton
             name={liked ? "heart" : "heart-outline"}
             size={24}
-            color={liked ? "#ef4444" : "#4b5563"}
+            color={liked ? "#EF4444" : "#4B5563"}
+            onPress={handleLike}
           />
-          <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>
-            {likeCount > 0 ? likeCount : t('timeline.like')}
-          </Text>
-        </TouchableOpacity>
+          <Text style={styles.actionText}>{likes}</Text>
+        </View>
 
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => setShowComments(!showComments)}
-        >
-          <Ionicons name="chatbubble-outline" size={22} color="#4b5563" />
-          <Text style={styles.actionText}>
-            {post.comments && post.comments > 0 ? post.comments : t('timeline.comment')}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.actionItem}>
+          <IconButton
+            name="chatbubble-outline"
+            size={22}
+            color="#4B5563"
+            onPress={() => setShowComments(!showComments)}
+          />
+          <Text style={styles.actionText}>{commentsCount}</Text>
+        </View>
       </View>
 
+      {/* コメントセクション */}
       {showComments && (
-        <CommentSection
-          postId={post.id}
-          postAuthorId={post.userId}
-        />
+        <View style={styles.commentSection}>
+          <CommentSection
+            postId={post.id}
+            postAuthorId={post.userId}
+            onCommentAdded={() => setCommentsCount(prev => prev + 1)}
+          />
+        </View>
       )}
-    </View>
+    </Card>
   );
 };
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'white', marginBottom: 12, paddingVertical: 12 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
-  userInfo: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#f3f4f6' },
-  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center' },
-  username: { fontWeight: 'bold', fontSize: 15, color: '#1f2937' },
-  date: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  moreButton: { padding: 4 },
-  content: { paddingHorizontal: 16, marginBottom: 12 },
-  activityContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, marginBottom: 8, gap: 8 },
-  activityBadge: { backgroundColor: '#eff6ff', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 16, borderWidth: 1, borderColor: '#dbeafe' },
-  activityText: { fontSize: 12, color: '#3b82f6', fontWeight: '600' },
-  imageWrapper: { width: SCREEN_WIDTH, height: SCREEN_WIDTH, marginBottom: 12, position: 'relative' },
-  imageScroll: { width: SCREEN_WIDTH, height: SCREEN_WIDTH },
-  postImage: { width: SCREEN_WIDTH, height: SCREEN_WIDTH, backgroundColor: '#f3f4f6' },
-  pagination: { position: 'absolute', bottom: 16, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  dot: { borderRadius: 3 },
-  activeDot: { width: 20, height: 6, backgroundColor: '#3b82f6', borderRadius: 3 },
-  inactiveDot: { width: 6, height: 6, backgroundColor: 'rgba(255, 255, 255, 0.6)' },
-  footer: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6', gap: 20 },
-  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actionText: { fontSize: 14, color: '#4b5563', fontWeight: '500' },
+  card: {
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  texts: {
+    marginLeft: 10,
+  },
+  username: {
+    fontWeight: 'bold',
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  date: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  content: {
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  activityContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  imageWrapper: {
+    width: '100%',
+    height: SCREEN_WIDTH * 0.8, // アスペクト比調整
+    backgroundColor: '#F3F4F6',
+    position: 'relative',
+  },
+  postImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageCounter: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 12,
+  },
+  footer: {
+    flexDirection: 'row',
+    padding: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 24,
+    paddingHorizontal: 8,
+  },
+  actionText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  commentSection: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
 });
