@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// 修正: パスを components/ui から ui に変更
+import { Input } from '../../../ui/Input';
+import { Button } from '../../../ui/Button';
 
 type Props = {
   visible: boolean;
@@ -11,7 +13,6 @@ type Props = {
 
 export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) => {
   const [name, setName] = useState('');
-  // 初期値を少しマイルドな値（一般的な運動の平均くらい）に変更
   const [low, setLow] = useState('3.0');
   const [mid, setMid] = useState('5.0');
   const [high, setHigh] = useState('7.0');
@@ -30,11 +31,10 @@ export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) =
         mid: Number(mid),
         high: Number(high)
       });
-      // フォームリセット
       setName('');
       setLow('3.0'); setMid('5.0'); setHigh('7.0');
-    } catch (error) {
-      alert('作成に失敗しました');
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -42,92 +42,47 @@ export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) =
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={{ flex: 1, backgroundColor: 'white' }} edges={['top', 'left', 'right']}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={styles.container}>
-            <View style={styles.header}>
-              <Text style={styles.title}>新しい運動を作成</Text>
-              <TouchableOpacity onPress={onCancel} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.title}>新しい運動を作成</Text>
+
+            <Input
+              label="運動名"
+              placeholder="例: ヨガ, ボルダリング"
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              containerStyle={{ marginBottom: 20 }}
+            />
+
+            <Text style={styles.sectionLabel}>強度別METs値</Text>
+            <View style={styles.metsRow}>
+              <View style={styles.metsCol}>
+                <Input label="弱め" value={low} onChangeText={setLow} keyboardType="numeric" placeholder="3.0" />
+              </View>
+              <View style={styles.metsCol}>
+                <Input label="普通" value={mid} onChangeText={setMid} keyboardType="numeric" placeholder="5.0" />
+              </View>
+              <View style={styles.metsCol}>
+                <Input label="強め" value={high} onChangeText={setHigh} keyboardType="numeric" placeholder="7.0" />
+              </View>
             </View>
 
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>運動名</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="例: ヨガ、ボルダリング"
-                  value={name}
-                  onChangeText={setName}
-                />
-              </View>
+            <View style={styles.referenceBox}>
+              <Text style={styles.refTitle}>💡 METsの目安</Text>
+              <View style={styles.refRow}><Text style={styles.refText}>散歩・ストレッチ</Text><Text style={styles.refVal}>2.5 〜 3.0</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>早歩き・自転車</Text><Text style={styles.refVal}>4.0 〜 5.0</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>ジョギング・筋トレ</Text><Text style={styles.refVal}>6.0 〜 7.0</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>ランニング・水泳</Text><Text style={styles.refVal}>8.0 〜 10.0</Text></View>
+            </View>
 
-              <View style={styles.divider} />
-
-              <Text style={styles.label}>強度設定 (METs)</Text>
-              <Text style={styles.helperText}>
-                消費カロリー計算に使われます。以下の目安を参考に設定してください。
-              </Text>
-
-              <View style={styles.metsRow}>
-                <View style={styles.metsInput}>
-                  <Text style={styles.subLabel}>低 (楽)</Text>
-                  <TextInput
-                    style={styles.inputCenter}
-                    value={low}
-                    onChangeText={setLow}
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={styles.metsInput}>
-                  <Text style={styles.subLabel}>中 (普通)</Text>
-                  <TextInput
-                    style={styles.inputCenter}
-                    value={mid}
-                    onChangeText={setMid}
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={styles.metsInput}>
-                  <Text style={styles.subLabel}>高 (キツイ)</Text>
-                  <TextInput
-                    style={styles.inputCenter}
-                    value={high}
-                    onChangeText={setHigh}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-
-              {/* ★ここがポイント: ユーザーが迷わないための目安表 */}
-              <View style={styles.referenceBox}>
-                <Text style={styles.refTitle}>📊 設定の目安</Text>
-                <View style={styles.refRow}>
-                  <Text style={styles.refName}>🚶 ウォーキング</Text>
-                  <Text style={styles.refVal}>低2.5 / 中3.5 / 高5.0</Text>
-                </View>
-                <View style={styles.refRow}>
-                  <Text style={styles.refName}>💪 筋トレ</Text>
-                  <Text style={styles.refVal}>低3.0 / 中5.0 / 高6.0</Text>
-                </View>
-                <View style={styles.refRow}>
-                  <Text style={styles.refName}>🧘 ヨガ・ストレッチ</Text>
-                  <Text style={styles.refVal}>低2.0 / 中2.5 / 高3.0</Text>
-                </View>
-                <View style={styles.refRow}>
-                  <Text style={styles.refName}>🏃 ランニング</Text>
-                  <Text style={styles.refVal}>低6.0 / 中8.0 / 高10.0</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.submitBtn, loading && styles.disabled]}
-                onPress={handleSubmit}
-                disabled={loading}
-              >
-                <Text style={styles.submitText}>{loading ? '作成中...' : 'この内容で作成'}</Text>
-              </TouchableOpacity>
+            <View style={styles.buttonGroup}>
+              <Button title="キャンセル" variant="outline" onPress={onCancel} style={{ flex: 1 }} />
+              <Button title="作成する" variant="primary" onPress={handleSubmit} loading={loading} style={{ flex: 1 }} />
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -137,51 +92,19 @@ export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) =
 };
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: 'white', padding: 24 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
-  closeBtn: { padding: 4 },
-  form: { gap: 20 },
-  inputGroup: { marginBottom: 10 },
-  label: { fontSize: 16, fontWeight: 'bold', marginBottom: 8, color: '#374151' },
-  helperText: { fontSize: 13, color: '#6B7280', marginBottom: 12 },
-  divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 8 },
-
-  input: {
-    borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8,
-    padding: 12, fontSize: 16, backgroundColor: '#F9FAFB'
-  },
-  inputCenter: {
-    borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8,
-    padding: 12, fontSize: 16, backgroundColor: '#F9FAFB', textAlign: 'center'
-  },
-
-  metsRow: { flexDirection: 'row', gap: 12 },
-  metsInput: { flex: 1 },
-  subLabel: { textAlign: 'center', marginBottom: 6, fontWeight: '600', color: '#4B5563', fontSize: 13 },
-
-  // 目安表のスタイル
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { padding: 24 },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, textAlign: 'center', color: '#1F2937' },
+  sectionLabel: { fontSize: 14, fontWeight: 'bold', color: '#374151', marginBottom: 8 },
+  metsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  metsCol: { flex: 1 },
   referenceBox: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#DBEAFE'
+    backgroundColor: '#EFF6FF', borderRadius: 12, padding: 16,
+    marginBottom: 30, borderWidth: 1, borderColor: '#DBEAFE'
   },
   refTitle: { fontWeight: 'bold', color: '#1E40AF', marginBottom: 8, fontSize: 14 },
-  refRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#DBEAFE', paddingBottom: 4
-  },
-  refName: { fontSize: 12, color: '#1F2937', fontWeight: '500' },
-  refVal: { fontSize: 12, color: '#4B5563' },
-
-  submitBtn: {
-    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12,
-    alignItems: 'center', marginTop: 12,
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 2
-  },
-  disabled: { backgroundColor: '#9CA3AF' },
-  submitText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  refRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#DBEAFE' },
+  refText: { fontSize: 13, color: '#1F2937' },
+  refVal: { fontSize: 13, fontWeight: 'bold', color: '#3B82F6' },
+  buttonGroup: { flexDirection: 'row', gap: 16 },
 });

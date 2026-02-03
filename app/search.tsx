@@ -3,11 +3,14 @@ import { View, TextInput, StyleSheet, TouchableOpacity, Text, ActivityIndicator,
 import { FlashList } from '@shopify/flash-list';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, limit, where, orderBy, startAt, endAt } from 'firebase/firestore'; // ★ startAt, endAt を追加
+import { Ionicons } from '@expo/vector-icons';
+import { collection, getDocs, query, limit, where, orderBy, startAt, endAt } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserList } from '../src/features/social/components/UserList';
 import { Post } from '../src/features/timeline/components/Post';
+
+// 共通コンポーネント
+import { IconButton } from '../src/ui/IconButton';
 
 type SearchType = 'user' | 'tag';
 
@@ -15,7 +18,6 @@ export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // URLパラメータがあれば初期値を設定 (例: #タグタップ時)
   const initialType = (params.type as SearchType) || 'user';
   const initialQuery = (params.q as string) || '';
 
@@ -24,74 +26,44 @@ export default function SearchScreen() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 画面ロード時にパラメータがあれば自動検索
   useEffect(() => {
-    if (initialQuery && initialType === 'tag') {
-      handleSearch(initialQuery, initialType);
+    if (initialQuery) {
+      handleSearch();
     }
   }, []);
 
-  const handleSearch = async (text: string = searchText, type: SearchType = activeTab) => {
-    if (!text.trim()) return;
-    Keyboard.dismiss();
+  const handleSearch = async () => {
+    if (!searchText.trim()) return;
     setLoading(true);
+    Keyboard.dismiss();
     setResults([]);
 
     try {
-      if (type === 'user') {
-        // --- ユーザー検索 (修正版: Firestoreクエリを使用) ---
-        const usersRef = collection(db, 'users');
+      let q;
+      const text = searchText.trim();
 
-        // ※注意: Firestoreは大文字小文字を区別します。
-        // 厳密に検索させるなら、保存時に「検索用小文字フィールド(username_lowerなど)」を作るのがベストプラクティスですが、
-        // ここでは簡易的に入力されたテキストで前方一致検索を行います。
-
-        // ユーザー名での前方一致検索
-        // これにより、例えば "tara" と打てば "tarou", "tarao" だけが取得されます。
-        // 全ユーザーをダウンロードしなくて済むため高速です。
-        const q = query(
-          usersRef,
+      if (activeTab === 'user') {
+        q = query(
+          collection(db, 'users'),
           orderBy('username'),
           startAt(text),
           endAt(text + '\uf8ff'),
           limit(20)
         );
-
-        const snapshot = await getDocs(q);
-
-        const foundUsers = snapshot.docs.map(doc => ({
-          uid: doc.id,
-          ...doc.data()
-        }));
-
-        setResults(foundUsers);
-
       } else {
-        // --- タグ検索 (既存のまま) ---
-        // 入力値に#がなければ付与する
-        const tag = text.trim().startsWith('#') ? text.trim() : `#${text.trim()}`;
-
-        const timelineRef = collection(db, 'timeline');
-        const q = query(
-          timelineRef,
-          where("hashtags", "array-contains", tag), // 配列内にタグが含まれるか
-          orderBy("createdAt", "desc"),
+        q = query(
+          collection(db, 'timeline'),
+          where('text', '>=', `#${text}`),
+          where('text', '<=', `#${text}` + '\uf8ff'),
           limit(20)
         );
-
-        const snapshot = await getDocs(q);
-        const posts = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          // Timestamp変換はPostコンポーネント内で行うためそのまま渡すか、ここで整形
-          timestamp: doc.data().createdAt
-        }));
-
-        setResults(posts);
       }
 
-    } catch (error) {
-      console.error("検索エラー:", error);
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setResults(data);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -99,58 +71,63 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ヘッダー検索バー */}
+      {/* ヘッダー */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <FontAwesome5 name="arrow-left" size={20} color="#333" />
-        </TouchableOpacity>
+        <IconButton
+          name="arrow-back"
+          size={24}
+          color="#333"
+          onPress={() => router.back()}
+          style={styles.backButton}
+        />
 
         <View style={styles.searchBar}>
-          <FontAwesome5 name="search" size={16} color="#999" style={styles.searchIcon} />
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.input}
-            placeholder={activeTab === 'user' ? "ユーザーを検索..." : "タグを検索 (例: 筋トレ)"}
+            placeholder={activeTab === 'user' ? "ユーザーIDで検索" : "タグで検索 (例: running)"}
+            placeholderTextColor="#9CA3AF"
             value={searchText}
             onChangeText={setSearchText}
             returnKeyType="search"
-            onSubmitEditing={() => handleSearch()}
+            onSubmitEditing={handleSearch}
             autoCapitalize="none"
           />
           {searchText.length > 0 && (
             <TouchableOpacity onPress={() => setSearchText('')}>
-              <Ionicons name="close-circle" size={16} color="#ccc" />
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* タブ切り替え */}
+      {/* タブ */}
       <View style={styles.tabs}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'user' && styles.activeTab]}
-          onPress={() => { setActiveTab('user'); setResults([]); }}
+          style={[styles.tabItem, activeTab === 'user' && styles.activeTabItem]}
+          onPress={() => setActiveTab('user')}
         >
           <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>ユーザー</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'tag' && styles.activeTab]}
-          onPress={() => { setActiveTab('tag'); setResults([]); }}
+          style={[styles.tabItem, activeTab === 'tag' && styles.activeTabItem]}
+          onPress={() => setActiveTab('tag')}
         >
-          <Text style={[styles.tabText, activeTab === 'tag' && styles.activeTabText]}>ハッシュタグ</Text>
+          <Text style={[styles.tabText, activeTab === 'tag' && styles.activeTabText]}>タグ</Text>
         </TouchableOpacity>
       </View>
 
       {/* 結果表示 */}
-      {loading ? (
-        <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 20 }} />
-      ) : (
-        <View style={styles.content}>
-          {activeTab === 'user' ? (
+      <View style={styles.content}>
+        {loading ? (
+          <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 20 }} />
+        ) : (
+          activeTab === 'user' ? (
             <UserList users={results} />
           ) : (
             <FlashList
               data={results}
-              estimatedItemSize={200}
+              estimatedItemSize={150}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => <Post post={item} />}
               contentContainerStyle={{ padding: 16 }}
@@ -160,9 +137,9 @@ export default function SearchScreen() {
                 ) : null
               }
             />
-          )}
-        </View>
-      )}
+          )
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -177,7 +154,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  backButton: { marginRight: 12, padding: 4 },
+  backButton: { marginRight: 8 },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
@@ -196,18 +173,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  tab: {
+  tabItem: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-  },
-  activeTab: {
     borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTabItem: {
     borderBottomColor: '#3B82F6',
   },
-  tabText: { color: '#666', fontWeight: '600' },
-  activeTabText: { color: '#3B82F6' },
-
-  content: { flex: 1 },
-  emptyText: { textAlign: 'center', marginTop: 20, color: '#888' },
+  tabText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#3B82F6',
+  },
+  content: {
+    flex: 1,
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 40,
+    color: '#9CA3AF',
+  }
 });

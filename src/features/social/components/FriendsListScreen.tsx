@@ -1,19 +1,17 @@
 import React from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-// ★修正: 新しいフック (useSocialList) を使う
 import { useSocialList } from '../hooks/useSocial';
 import { useAuth } from '../../auth/useAuth';
-// ★修正: 先ほど直した UserList (Named Export) を使う
 import { UserList } from './UserList';
 
 type Props = {
-  type: 'following' | 'followers'; // 「フォロー中」か「フォロワー」かを受け取る
+  type: 'following' | 'followers';
 };
 
 export const FriendsListScreen = ({ type }: Props) => {
   const { userProfile } = useAuth();
-  
-  // ★重要: ここで自動的にデータを取得します (fetchFollowingなどは呼び出し不要)
+
+  // データを自動取得
   const { users, loading } = useSocialList(userProfile?.uid, type);
 
   if (loading) {
@@ -34,7 +32,7 @@ export const FriendsListScreen = ({ type }: Props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F3F4F6', // 背景色をアプリ全体で統一
   },
   center: {
     flex: 1,

@@ -1,7 +1,6 @@
 import React from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
-// ★修正: { } を外して Default Import に変更
-import UserCard from './UserCard';
+import { UserCard } from './UserCard'; // Named Importに変更
 
 type Props = {
   users: any[];
@@ -36,7 +35,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   emptyText: {
-    color: '#888',
+    color: '#9CA3AF', // 共通カラーに合わせる
     fontSize: 14,
   },
 });

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { GiftedChat, Actions } from 'react-native-gifted-chat';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { useHeaderHeight } from '@react-navigation/elements';
 
@@ -12,6 +11,9 @@ import { db } from '../../firebaseConfig';
 import { useAuth } from '../../src/features/auth/useAuth';
 import { useChat } from '../../src/features/dm/hooks/useChat';
 import { useSafety } from '../../src/hooks/useSafety';
+
+// 共通コンポーネント
+import { IconButton } from '../../src/ui/IconButton';
 
 export default function ChatRoomScreen() {
   const { id } = useLocalSearchParams();
@@ -27,35 +29,39 @@ export default function ChatRoomScreen() {
   const [partnerName, setPartnerName] = useState('チャット');
 
   useEffect(() => {
-    const fetchPartnerProfile = async () => {
-      if (partnerId) {
+    if (partnerId) {
+      const fetchPartner = async () => {
         try {
-          const userDoc = await getDoc(doc(db, 'users', partnerId));
-          if (userDoc.exists()) {
-            setPartnerName(userDoc.data().username || '名無しさん');
+          const docRef = doc(db, 'users', partnerId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            setPartnerName(data.username || data.displayName || 'チャット');
           }
         } catch (e) {
           console.error(e);
         }
-      }
-    };
-    fetchPartnerProfile();
+      };
+      fetchPartner();
+      markAsRead();
+    }
   }, [partnerId]);
 
   useEffect(() => {
     navigation.setOptions({
       title: partnerName,
+      // ヘッダー右上のメニューボタンをIconButtonに置き換え
       headerRight: () => (
-        <TouchableOpacity onPress={showActionSheet} style={{ padding: 8 }}>
-          <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
-        </TouchableOpacity>
+        <IconButton
+          name="ellipsis-horizontal"
+          size={24}
+          color="#333"
+          onPress={showActionSheet}
+          style={{ padding: 4 }}
+        />
       ),
     });
   }, [navigation, partnerName]);
-
-  useEffect(() => {
-    markAsRead();
-  }, [messages.length]);
 
   const showActionSheet = () => {
     Alert.alert(
@@ -90,9 +96,9 @@ export default function ChatRoomScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,          // 複数選択時は編集不可にする
-      allowsMultipleSelection: true, // ★追加: 複数選択を有効化
-      selectionLimit: 10,            // ★追加: 一度に送れる枚数を10枚に制限
+      allowsEditing: false,
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
       quality: 0.5,
     });
 
@@ -104,7 +110,6 @@ export default function ChatRoomScreen() {
       };
 
       const count = result.assets.length;
-      // 枚数に応じてメッセージを切り替え
       const confirmMessage = count === 1
         ? "この画像を送信しますか？"
         : `${count}枚の画像を送信しますか？`;
@@ -117,7 +122,6 @@ export default function ChatRoomScreen() {
           {
             text: "送信",
             onPress: async () => {
-              // ★修正: 選択された全画像を並列で送信
               try {
                 const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
                 await Promise.all(sendPromises);
@@ -133,13 +137,16 @@ export default function ChatRoomScreen() {
   }, [userProfile, sendImage]);
 
   const renderActions = useCallback((props: any) => {
+    // GiftedChatのActionsコンポーネントの代わりに、IconButtonを配置して見た目を統一
     return (
-      <Actions
-        {...props}
-        containerStyle={styles.actionContainer}
-        icon={() => <Ionicons name="image" size={28} color="#3B82F6" />}
-        onPressActionButton={handlePickImage}
-      />
+      <View style={styles.actionContainer}>
+        <IconButton
+          name="image"
+          size={28}
+          color="#3B82F6"
+          onPress={handlePickImage}
+        />
+      </View>
     );
   }, [handlePickImage]);
 
@@ -194,5 +201,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 0,
+    marginLeft: 4,
   }
 });

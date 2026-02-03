@@ -2,31 +2,34 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5 } from '@expo/vector-icons';
 import { FriendsListScreen } from '../src/features/social/components/FriendsListScreen';
+
+// 共通コンポーネント
+import { IconButton } from '../src/ui/IconButton';
 
 export default function FriendsPage() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  // URLパラメータで初期タブを決める (デフォルトは 'following')
   const [activeTab, setActiveTab] = useState<'following' | 'followers'>(
     (params.type as 'following' | 'followers') || 'following'
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ヘッダー */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <FontAwesome5 name="arrow-left" size={20} color="#333" />
-        </TouchableOpacity>
+        <IconButton
+          name="arrow-back"
+          size={24}
+          color="#333"
+          onPress={() => router.back()}
+          style={styles.backButton}
+        />
         <Text style={styles.headerTitle}>友達リスト</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* タブ切り替え */}
       <View style={styles.tabContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'following' && styles.activeTab]}
           onPress={() => setActiveTab('following')}
         >
@@ -34,8 +37,8 @@ export default function FriendsPage() {
             フォロー中
           </Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'followers' && styles.activeTab]}
           onPress={() => setActiveTab('followers')}
         >
@@ -45,7 +48,6 @@ export default function FriendsPage() {
         </TouchableOpacity>
       </View>
 
-      {/* リスト表示 */}
       <View style={styles.content}>
         <FriendsListScreen type={activeTab} />
       </View>
@@ -63,7 +65,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  backButton: { padding: 4 },
+  backButton: { margin: 0 },
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
   tabContainer: {
     flexDirection: 'row',
@@ -74,12 +76,21 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomWidth: 2,
     borderBottomColor: '#3B82F6',
   },
-  tabText: { color: '#666', fontWeight: '600' },
-  activeTabText: { color: '#3B82F6' },
-  content: { flex: 1, backgroundColor: '#f8fafc' },
+  tabText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#3B82F6',
+  },
+  content: {
+    flex: 1,
+  },
 });
