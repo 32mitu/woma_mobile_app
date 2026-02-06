@@ -6,10 +6,13 @@ import {
     StyleSheet,
     ViewStyle,
     TextStyle,
-    TouchableOpacityProps
+    TouchableOpacityProps,
+    View
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
+type ButtonSize = 'sm' | 'md' | 'lg'; // サイズ定義がない場合はデフォルトmdとして扱いますが、拡張性を考慮して型のみ追加しておきます
 
 interface ButtonProps extends TouchableOpacityProps {
     title: string;
@@ -28,6 +31,7 @@ export const Button = ({
     icon,
     style,
     textStyle,
+    onPress,
     ...props
 }: ButtonProps) => {
 
@@ -54,46 +58,54 @@ export const Button = ({
                 return styles.textPrimary;
             case 'ghost':
                 return styles.textGhost;
-            case 'primary':
             case 'danger':
+            case 'primary':
             default:
                 return styles.textWhite;
         }
     };
 
-    const isButtonDisabled = disabled || loading;
+    // インジケーターの色決定
+    const getIndicatorColor = () => {
+        if (variant === 'outline' || variant === 'ghost' || variant === 'secondary') {
+            return '#3B82F6'; // Primary Color
+        }
+        return '#FFFFFF';
+    };
+
+    // Hapticsを追加したプレスハンドラ
+    const handlePress = (e: any) => {
+        if (disabled || loading) return;
+
+        // 軽量な触覚フィードバックを発火
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {
+            // Hapticsがサポートされていない環境などでのエラーは無視
+        });
+
+        if (onPress) {
+            onPress(e);
+        }
+    };
 
     return (
         <TouchableOpacity
             style={[
                 styles.base,
                 getVariantStyle(),
-                isButtonDisabled && styles.disabled,
-                // outline/ghostの場合は無効時のボーダー色なども調整
-                (variant === 'outline' || variant === 'ghost') && isButtonDisabled && styles.disabledTransparent,
-                style,
+                (disabled || loading) && styles.disabled,
+                style
             ]}
-            disabled={isButtonDisabled}
+            onPress={handlePress}
             activeOpacity={0.7}
+            disabled={disabled || loading}
             {...props}
         >
             {loading ? (
-                <ActivityIndicator
-                    size="small"
-                    color={variant === 'primary' || variant === 'danger' ? '#fff' : '#3B82F6'}
-                />
+                <ActivityIndicator color={getIndicatorColor()} />
             ) : (
                 <>
-                    {icon && icon}
-                    <Text
-                        style={[
-                            styles.textBase,
-                            getTextStyle(),
-                            isButtonDisabled && styles.textDisabled,
-                            !!icon && { marginLeft: 8 },
-                            textStyle
-                        ]}
-                    >
+                    {icon && <View style={styles.iconContainer}>{icon}</View>}
+                    <Text style={[styles.textBase, getTextStyle(), textStyle]}>
                         {title}
                     </Text>
                 </>
@@ -104,7 +116,7 @@ export const Button = ({
 
 const styles = StyleSheet.create({
     base: {
-        paddingVertical: 14,
+        height: 48,
         paddingHorizontal: 24,
         borderRadius: 12,
         flexDirection: 'row',
@@ -117,23 +129,24 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
+    iconContainer: {
+        marginRight: 8,
+    },
 
+    // Variants
     primary: {
         backgroundColor: '#3B82F6',
         borderWidth: 0,
     },
-
     secondary: {
         backgroundColor: '#FFFFFF',
         borderWidth: 1,
         borderColor: '#E5E7EB',
     },
-
     danger: {
         backgroundColor: '#EF4444',
         borderWidth: 0,
     },
-
     outline: {
         backgroundColor: 'transparent',
         borderWidth: 1,
@@ -141,14 +154,12 @@ const styles = StyleSheet.create({
         shadowOpacity: 0,
         elevation: 0,
     },
-
     ghost: {
         backgroundColor: 'transparent',
         borderWidth: 0,
         shadowOpacity: 0,
         elevation: 0,
     },
-
     disabled: {
         backgroundColor: '#9CA3AF',
         shadowOpacity: 0,
@@ -156,18 +167,19 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
     },
 
-    disabledTransparent: {
-        backgroundColor: 'transparent',
-        borderColor: '#9CA3AF',
-    },
-
+    // Text Styles
     textBase: {
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '600',
         textAlign: 'center',
     },
-    textWhite: { color: '#FFFFFF' },
-    textPrimary: { color: '#3B82F6' },
-    textGhost: { color: '#4B5563' },
-    textDisabled: { color: '#F3F4F6' },
+    textWhite: {
+        color: '#FFFFFF',
+    },
+    textPrimary: {
+        color: '#3B82F6',
+    },
+    textGhost: {
+        color: '#4B5563',
+    },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-// ★ 作成した RecordForm コンポーネントを読み込む
-import { RecordForm } from '../../src/features/record/components/Recordform';
+// 修正箇所: default export なので {} を外して読み込む
+import RecordForm from '../../src/features/record/components/Recordform';
 
 export default function RecordScreen() {
   return (
@@ -19,4 +19,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff'
   },
 });
-

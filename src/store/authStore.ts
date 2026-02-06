@@ -1,42 +1,51 @@
 import { create } from 'zustand';
-
-// ユーザー情報の型定義 (既存の型に合わせて調整)
-type UserProfile = {
-    uid: string;
-    username: string;
-    displayName?: string;
-    photoURL?: string | null;
-    email?: string | null;
-    weight?: number | string;
-    height?: number | string;
-    // その他必要なプロパティ
-    createdAt?: any;
-};
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { User } from '../types'; // 作成した型定義をインポート
 
 type AuthState = {
-    user: UserProfile | null;
+    user: User | null;
     isLoading: boolean;
-    setUser: (user: UserProfile | null) => void;
-    updateUser: (updates: Partial<UserProfile>) => void;
+    isAuthenticated: boolean;
+
+    setUser: (user: User | null) => void;
+    updateUser: (updates: Partial<User>) => void;
     setLoading: (loading: boolean) => void;
     logout: () => void;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-    user: null,
-    isLoading: true,
+export const useAuthStore = create<AuthState>()(
+    persist(
+        (set) => ({
+            user: null,
+            isLoading: true,
+            isAuthenticated: false,
 
-    // ユーザー情報をセット（ログイン時など）
-    setUser: (user) => set({ user }),
+            // ユーザー情報をセット（ログイン時など）
+            setUser: (user) => set({
+                user,
+                isAuthenticated: !!user,
+                isLoading: false
+            }),
 
-    // ユーザー情報の一部更新（プロフィール編集時など）
-    updateUser: (updates) => set((state) => ({
-        user: state.user ? { ...state.user, ...updates } : null
-    })),
+            // ユーザー情報の一部更新（プロフィール編集時など）
+            updateUser: (updates) => set((state) => ({
+                user: state.user ? { ...state.user, ...updates } : null
+            })),
 
-    // ローディング状態の変更
-    setLoading: (loading) => set({ isLoading: loading }),
+            // ローディング状態の変更
+            setLoading: (loading) => set({ isLoading: loading }),
 
-    // ログアウト（初期化）
-    logout: () => set({ user: null }),
-}));
+            // ログアウト（全データクリア）
+            logout: () => set({
+                user: null,
+                isAuthenticated: false
+            }),
+        }),
+        {
+            name: 'woma-auth-storage', // 保存時のキー名
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({ user: state.user }), // user情報のみ永続化
+        }
+    )
+);
