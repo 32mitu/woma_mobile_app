@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert, Text } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Alert, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGroups } from '../../src/features/groups/hooks/useGroups';
 import { useAuth } from '../../src/features/auth/useAuth';
+
+// React Hook Form & Zod
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { groupCreateSchema, GroupCreateFormData } from '../../src/utils/validationSchemas';
 
 // 共通コンポーネント
 import { Button } from '../../src/ui/Button';
@@ -15,74 +20,101 @@ export default function CreateGroupScreen() {
   const { userProfile } = useAuth();
   const { createGroup } = useGroups();
 
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  // フォーム設定
+  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<GroupCreateFormData>({
+    resolver: zodResolver(groupCreateSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+    },
+  });
 
-  const handleCreate = async () => {
-    if (!name.trim() || !desc.trim()) {
-      Alert.alert('エラー', 'グループ名と説明を入力してください');
-      return;
-    }
+  // 送信処理
+  const onSubmit = async (data: GroupCreateFormData) => {
     if (!userProfile) {
       Alert.alert('エラー', 'ログインが必要です');
       return;
     }
 
-    setSubmitting(true);
     try {
-      await createGroup(name, desc, userProfile.uid);
+      // useGroupsフックのcreateGroupを呼び出す
+      // ※スキーマ定義の description と、createGroupの引数(desc)を合わせる
+      await createGroup(data.name, data.description || '', userProfile.uid);
+
       Alert.alert('完了', 'グループを作成しました！', [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (e) {
+      console.error(e);
       Alert.alert('エラー', '作成に失敗しました');
-    } finally {
-      setSubmitting(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ヘッダー */}
-      <View style={styles.header}>
-        <IconButton
-          name="close"
-          size={24}
-          color="#333"
-          onPress={() => router.back()}
-        />
-        <Text style={styles.title}>グループ作成</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      {/* キーボードで入力欄が隠れないように調整 */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          {/* ヘッダー */}
+          <View style={styles.header}>
+            <IconButton
+              name="close"
+              size={24}
+              color="#333"
+              onPress={() => router.back()}
+            />
+            <Text style={styles.title}>グループ作成</Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-      <View style={styles.form}>
-        <Input
-          label="グループ名"
-          placeholder="例: 早起きチャレンジ部"
-          value={name}
-          onChangeText={setName}
-          containerStyle={styles.inputGap}
-        />
+          <View style={styles.form}>
+            <Controller
+              control={control}
+              name="name"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="グループ名"
+                  placeholder="例: 早起きチャレンジ部"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.name?.message}
+                  containerStyle={styles.inputGap}
+                />
+              )}
+            />
 
-        <Input
-          label="説明"
-          placeholder="活動内容や目標などを記入"
-          multiline
-          numberOfLines={3}
-          value={desc}
-          onChangeText={setDesc}
-          containerStyle={styles.inputGap}
-        />
+            <Controller
+              control={control}
+              name="description"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="説明"
+                  placeholder="活動内容や目標などを記入"
+                  multiline
+                  numberOfLines={3}
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.description?.message}
+                  containerStyle={styles.inputGap}
+                />
+              )}
+            />
 
-        <Button
-          title="作成する"
-          onPress={handleCreate}
-          loading={submitting}
-          variant="primary"
-          style={styles.submitBtn}
-        />
-      </View>
+            <Button
+              title="作成する"
+              onPress={handleSubmit(onSubmit)}
+              loading={isSubmitting}
+              variant="primary"
+              style={styles.submitBtn}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

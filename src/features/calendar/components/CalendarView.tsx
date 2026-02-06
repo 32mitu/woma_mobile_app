@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -17,7 +17,7 @@ LocaleConfig.locales['jp'] = {
 };
 LocaleConfig.defaultLocale = 'jp';
 
-export const CalendarView = () => {
+const CalendarViewComponent = () => {
   const { userProfile } = useAuth();
   const [markedDates, setMarkedDates] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -58,17 +58,17 @@ export const CalendarView = () => {
     fetchMonthlyData();
   }, [userProfile?.uid]);
 
-  const handleDayPress = (day: any) => {
+  // Calendarに渡す関数を固定（重要）
+  const handleDayPress = useCallback((day: any) => {
     setSelectedDate(day.dateString);
     setModalVisible(true);
-  };
+  }, []);
 
   if (loading) {
     return <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 20 }} />;
   }
 
   return (
-    // カレンダー全体を共通のCardでラップ
     <Card style={styles.container}>
       <Calendar
         current={new Date().toISOString().split('T')[0]}
@@ -99,7 +99,6 @@ export const CalendarView = () => {
 
 const styles = StyleSheet.create({
   container: {
-    // Cardのデフォルトパディングや影を使用するため、独自スタイルは最小限に
     padding: 10,
     marginVertical: 10,
   },
@@ -122,3 +121,5 @@ const styles = StyleSheet.create({
     color: '#666',
   },
 });
+
+export const CalendarView = memo(CalendarViewComponent);

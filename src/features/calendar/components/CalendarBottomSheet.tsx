@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
 import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
@@ -13,24 +13,29 @@ type Props = {
   selectedDate: string; // "YYYY-MM-DD"
 };
 
-export const CalendarBottomSheet = ({ isVisible, onClose, selectedDate }: Props) => {
+const CalendarBottomSheetComponent = ({ isVisible, onClose, selectedDate }: Props) => {
   const { userProfile } = useAuth();
 
+  // クエリのメモ化 (これが無いとレンダリング毎にActivityLogが再マウントされてしまいます)
+  const dailyQuery = useMemo(() => {
+    if (!selectedDate || !userProfile?.uid) return undefined;
+
+    const startOfDay = new Date(selectedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(selectedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return query(
+      collection(db, 'exerciseRecords'),
+      where('userId', '==', userProfile.uid),
+      where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+      where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
+      orderBy('createdAt', 'desc')
+    );
+  }, [selectedDate, userProfile?.uid]);
+
   if (!selectedDate || !userProfile?.uid) return null;
-
-  const startOfDay = new Date(selectedDate);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(selectedDate);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const dailyQuery = query(
-    collection(db, 'exerciseRecords'),
-    where('userId', '==', userProfile.uid),
-    where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
-    where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
-    orderBy('createdAt', 'desc')
-  );
 
   return (
     <Modal
@@ -58,7 +63,8 @@ export const CalendarBottomSheet = ({ isVisible, onClose, selectedDate }: Props)
               </View>
 
               <View style={styles.content}>
-                <ActivityLog customQuery={dailyQuery} />
+                {/* queryがundefinedでない場合のみ表示 */}
+                {dailyQuery && <ActivityLog customQuery={dailyQuery} />}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -100,3 +106,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+export const CalendarBottomSheet = memo(CalendarBottomSheetComponent);
