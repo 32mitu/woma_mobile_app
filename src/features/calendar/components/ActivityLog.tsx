@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import { collection, query, where, orderBy, onSnapshot, Query } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
@@ -10,7 +10,7 @@ type Props = {
   customQuery?: Query;
 };
 
-export const ActivityLog = ({ userId, customQuery }: Props) => {
+const ActivityLogComponent = ({ userId, customQuery }: Props) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,11 +44,8 @@ export const ActivityLog = ({ userId, customQuery }: Props) => {
     return () => unsubscribe();
   }, [userId, customQuery]);
 
-  if (loading) {
-    return <ActivityIndicator style={{ marginTop: 20 }} color="#3B82F6" />;
-  }
-
-  const renderItem = ({ item }: { item: any }) => {
+  // renderItemのメモ化
+  const renderItem = useCallback(({ item }: { item: any }) => {
     const dateStr = `${item.createdAt.getMonth() + 1}/${item.createdAt.getDate()} (${['日', '月', '火', '水', '木', '金', '土'][item.createdAt.getDay()]})`;
 
     return (
@@ -71,7 +68,13 @@ export const ActivityLog = ({ userId, customQuery }: Props) => {
         ) : null}
       </Card>
     );
-  };
+  }, []);
+
+  const keyExtractor = useCallback((item: any) => item.id, []);
+
+  if (loading) {
+    return <ActivityIndicator style={{ marginTop: 20 }} color="#3B82F6" />;
+  }
 
   return (
     <View style={styles.container}>
@@ -80,8 +83,8 @@ export const ActivityLog = ({ userId, customQuery }: Props) => {
       <FlatList
         data={logs}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
+        keyExtractor={keyExtractor}
+        scrollEnabled={false} // 親がScrollViewの場合はfalseでOK
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>まだ記録がありません</Text>
@@ -98,7 +101,6 @@ const styles = StyleSheet.create({
   emptyContainer: { padding: 20, alignItems: 'center' },
   emptyText: { color: '#888', marginBottom: 4 },
   logCard: {
-    // Cardの基本スタイルに加えて、アクセントのボーダーを追加
     borderLeftWidth: 4,
     borderLeftColor: '#3B82F6',
     marginBottom: 12,
@@ -117,3 +119,5 @@ const styles = StyleSheet.create({
   activityDetail: { fontSize: 14, color: '#666', fontWeight: '500' },
   comment: { fontSize: 13, color: '#6B7280', marginTop: 8, fontStyle: 'italic' },
 });
+
+export const ActivityLog = memo(ActivityLogComponent);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,7 +8,12 @@ import { db, storage } from '../../../../firebaseConfig';
 import { useAuthStore } from '../../../store/authStore';
 import { useTranslation } from 'react-i18next';
 
-// 共通コンポーネント
+// Hook Form & Zod
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { profileSchema, ProfileFormData } from '../../../utils/validationSchemas';
+
+// UI
 import { Input } from '../../../ui/Input';
 import { Button } from '../../../ui/Button';
 import { Avatar } from '../../../ui/Avatar';
@@ -18,24 +23,32 @@ export const ProfileEditForm = () => {
   const router = useRouter();
   const { t } = useTranslation();
   const { user, updateUser } = useAuthStore();
-
-  const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('');
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+
+  // フォーム設定
+  const { control, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<any>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      username: '',
+      bio: '',
+      height: '',
+      weight: '',
+    }
+  });
 
   useEffect(() => {
     if (user) {
-      setUsername(user.username || user.displayName || '');
-      setBio(user.bio || '');
-      setHeight(user.height ? String(user.height) : '');
-      setWeight(user.weight ? String(user.weight) : '');
+      reset({
+        username: user.username || user.displayName || '',
+        bio: user.bio || '',
+        height: user.height ? String(user.height) : '',
+        weight: user.weight ? String(user.weight) : '',
+      });
       setImageUri(user.profileImageUrl || user.photoURL || null);
     }
-  }, [user]);
+  }, [user, reset]);
 
+  // 画像選択ロジック (変更なし)
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
@@ -61,22 +74,22 @@ export const ProfileEditForm = () => {
     return await getDownloadURL(storageRef);
   };
 
-  const handleSave = async () => {
+  const onSubmit = async (data: any) => {
+    // data.height, data.weight はスキーマ定義により既に number | null に変換されています
     if (!user?.uid) return;
-    setSaving(true);
 
     try {
       let downloadUrl = imageUri;
-      if (imageUri && !imageUri.startsWith('http')) {
+      if (imageUri && !imageUri.startsWith('http') && imageUri !== null) {
         downloadUrl = await uploadImage(imageUri, user.uid);
       }
 
-      const updatedData: any = {
-        username,
-        displayName: username,
-        bio,
-        height: height ? Number(height) : null,
-        weight: weight ? Number(weight) : null,
+      const updatedData = {
+        username: data.username,
+        displayName: data.username,
+        bio: data.bio,
+        height: data.height,
+        weight: data.weight,
         profileImageUrl: downloadUrl,
         photoURL: downloadUrl,
         updatedAt: serverTimestamp(),
@@ -84,9 +97,9 @@ export const ProfileEditForm = () => {
 
       await setDoc(doc(db, 'users', user.uid), updatedData, { merge: true });
 
-      if (weight) {
+      if (data.weight) {
         await addDoc(collection(db, 'users', user.uid, 'weightHistory'), {
-          weight: Number(weight),
+          weight: data.weight,
           date: serverTimestamp(),
           createdAt: serverTimestamp(),
         });
@@ -98,8 +111,6 @@ export const ProfileEditForm = () => {
     } catch (error) {
       console.error(error);
       Alert.alert(t('common.error', 'エラー'), t('common.saveFailed', '保存に失敗しました'));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -110,12 +121,7 @@ export const ProfileEditForm = () => {
           <View>
             <Avatar uri={imageUri} size="xl" />
             <View style={styles.cameraIcon}>
-              <IconButton
-                name="camera"
-                size={16}
-                color="white"
-                variant="ghost"
-              />
+              <IconButton name="camera" size={16} color="white" variant="ghost" />
             </View>
           </View>
         </TouchableOpacity>
@@ -123,51 +129,83 @@ export const ProfileEditForm = () => {
       </View>
 
       <View style={styles.form}>
-        <Input
-          label={t('profile.name', '名前')}
-          value={username}
-          onChangeText={setUsername}
-          placeholder="ユーザー名"
-          containerStyle={styles.inputGroup}
+        <Controller
+          control={control}
+          name="username"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <Input
+              label={t('profile.name', '名前')}
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              error={errors.username?.message as string}
+              placeholder="ユーザー名"
+              containerStyle={styles.inputGroup}
+            />
+          )}
         />
 
-        <Input
-          label={t('profile.bio', '自己紹介')}
-          value={bio}
-          onChangeText={setBio}
-          placeholder="ひとこと"
-          multiline
-          numberOfLines={3}
-          containerStyle={styles.inputGroup}
+        <Controller
+          control={control}
+          name="bio"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <Input
+              label={t('profile.bio', '自己紹介')}
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              error={errors.bio?.message as string}
+              placeholder="ひとこと"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.inputGroup}
+            />
+          )}
         />
 
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 8 }}>
-            <Input
-              label={`${t('profile.height', '身長')} (cm)`}
-              value={height}
-              onChangeText={setHeight}
-              keyboardType="numeric"
-              placeholder="170"
-              containerStyle={styles.inputGroup}
+            <Controller
+              control={control}
+              name="height"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label={`${t('profile.height', '身長')} (cm)`}
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.height?.message as string}
+                  keyboardType="numeric"
+                  placeholder="170"
+                  containerStyle={styles.inputGroup}
+                />
+              )}
             />
           </View>
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <Input
-              label={`${t('profile.weight', '体重')} (kg)`}
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="numeric"
-              placeholder="60"
-              containerStyle={styles.inputGroup}
+            <Controller
+              control={control}
+              name="weight"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label={`${t('profile.weight', '体重')} (kg)`}
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.weight?.message as string}
+                  keyboardType="numeric"
+                  placeholder="60"
+                  containerStyle={styles.inputGroup}
+                />
+              )}
             />
           </View>
         </View>
 
         <Button
           title={t('common.save', '保存する')}
-          onPress={handleSave}
-          loading={saving}
+          onPress={handleSubmit(onSubmit)}
+          loading={isSubmitting}
           variant="primary"
           style={{ marginTop: 20 }}
         />
@@ -177,40 +215,15 @@ export const ProfileEditForm = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff'
-  },
-  imageSection: {
-    alignItems: 'center',
-    paddingVertical: 24
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  imageSection: { alignItems: 'center', paddingVertical: 24 },
   cameraIcon: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#3B82F6',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'white'
+    position: 'absolute', bottom: 0, right: 0, backgroundColor: '#3B82F6',
+    borderRadius: 15, width: 30, height: 30, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'white'
   },
-  changePhotoText: {
-    color: '#3B82F6',
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  form: {
-    padding: 16
-  },
-  inputGroup: {
-    marginBottom: 20
-  },
-  row: {
-    flexDirection: 'row'
-  },
+  changePhotoText: { color: '#3B82F6', marginTop: 8, fontSize: 14, fontWeight: '600' },
+  form: { padding: 16 },
+  inputGroup: { marginBottom: 20 },
+  row: { flexDirection: 'row' },
 });

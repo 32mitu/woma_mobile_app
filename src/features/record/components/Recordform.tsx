@@ -1,47 +1,95 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, Platform, Switch, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
+
+// Hooks & Logic
 import { useAuth } from '../../auth/useAuth';
 import { useRecordSaver } from '../useRecordSaver';
 import { useExerciseTypes } from '../../../hooks/useExerciseTypes';
+import { useHealthKit } from '../../../hooks/useHealthKit';
+
+// React Hook Form & Zod
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { recordSchema, RecordFormData } from '../../../utils/validationSchemas';
+
+// Components
 import { ActivityInput } from './ActivityInput';
-import { RecordFormInputs } from './RecordformInputs';
 import { ExerciseSelector } from './ExerciseSelector';
 import { CreateExerciseTypeForm } from './CreateExerciseTypeForm';
-import { Ionicons } from '@expo/vector-icons';
-import { useHealthKit } from '../../../hooks/useHealthKit';
-import { useTranslation } from 'react-i18next';
-
-// 共通コンポーネント
 import { Button } from '../../../ui/Button';
 import { Card } from '../../../ui/Card';
+import { Input } from '../../../ui/Input';
+import { ListItem } from '../../../ui/ListItem';
+import { IconButton } from '../../../ui/IconButton';
 
 export const RecordForm = () => {
   const router = useRouter();
   const { t } = useTranslation();
   const { userProfile } = useAuth();
 
+  // --- フォーム設定 (React Hook Form) ---
+  const { control, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<RecordFormData>({
+    resolver: zodResolver(recordSchema),
+    defaultValues: {
+      weight: '',
+      comment: '',
+      postToTimeline: true,
+    }
+  });
+
+  // --- カスタムフック ---
   const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
   const { saveRecord, saving } = useRecordSaver();
   const { getTodaySteps, loading: healthLoading } = useHealthKit();
 
+  // --- ローカルステート (フォーム管理外の動的データ) ---
   const [activities, setActivities] = useState<any[]>([]);
-  const [weight, setWeight] = useState('');
-  const [comment, setComment] = useState('');
   const [imageUris, setImageUris] = useState<string[]>([]);
-  const [postToTimeline, setPostToTimeline] = useState(true);
-
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
 
-  // 体重の決定
-  const effectiveWeight = weight || (userProfile?.weight ? String(userProfile.weight) : '');
+  // プロフィールの体重を初期値としてセット
+  useEffect(() => {
+    if (userProfile?.weight) {
+      setValue('weight', String(userProfile.weight));
+    }
+  }, [userProfile, setValue]);
 
+  // ActivityInput等で計算に使うための現在の入力体重
+  const currentWeightInput = watch('weight');
+  const effectiveWeight = currentWeightInput || (userProfile?.weight ? String(userProfile.weight) : '');
+
+  // --- 画像選択ロジック ---
+  const pickImage = async () => {
+    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!granted) {
+      Alert.alert("許可が必要です", "写真へのアクセス許可が必要です");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      selectionLimit: 4 - imageUris.length, // 残りの枚数分だけ選択可能
+    });
+
+    if (!result.canceled) {
+      const newUris = result.assets.map(asset => asset.uri);
+      setImageUris(prev => [...prev, ...newUris]);
+    }
+  };
+
+  // --- アクティビティ操作ロジック ---
   const handleAddActivity = () => {
     setSelectorVisible(true);
   };
 
   const handleSelectExercise = (type: any) => {
+    // METs値の取得ロジック (既存維持)
     let lowVal, midVal, highVal;
     if (type.metsValues) {
       lowVal = type.metsValues['低'];
@@ -104,8 +152,6 @@ export const RecordForm = () => {
         Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessUpdate', { steps: steps.toLocaleString() }));
       } else {
         const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
-        // ... (省略: METs取得ロジック) ...
-        // 既存のロジックと同じ
         const wLow = walkType?.metsValues?.['低'] || walkType?.low || 3.0;
         const wMid = walkType?.metsValues?.['中'] || walkType?.mid || 3.5;
         const wHigh = walkType?.metsValues?.['高'] || walkType?.high || 4.0;
@@ -133,12 +179,21 @@ export const RecordForm = () => {
     setCreateVisible(false);
   };
 
-  const handleSave = async () => {
-    if (activities.length === 0 && !comment.trim() && imageUris.length === 0 && !weight) {
+  // --- 送信処理 ---
+  const onSubmit = async (data: RecordFormData) => {
+    // アクティビティも画像もコメントも体重もない場合はエラー
+    if (activities.length === 0 && !data.comment && imageUris.length === 0 && !data.weight) {
       Alert.alert(t('common.error'), t('record.validationError'));
       return;
     }
-    await saveRecord({ activities, weight, comment, imageUris, postToTimeline });
+
+    await saveRecord({
+      activities,
+      weight: data.weight || '',
+      comment: data.comment || '',
+      imageUris,
+      postToTimeline: data.postToTimeline
+    });
   };
 
   return (
@@ -146,7 +201,7 @@ export const RecordForm = () => {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.pageTitle}>{t('record.todaysRecord')}</Text>
 
-        {/* ヘルスケア連携ボタン (iOSのみ) */}
+        {/* ヘルスケア連携 (iOSのみ) */}
         {Platform.OS === 'ios' && (
           <View style={styles.headerButtons}>
             <Button
@@ -154,15 +209,14 @@ export const RecordForm = () => {
               onPress={handleImportHealthData}
               loading={healthLoading}
               icon={<Ionicons name="heart" size={16} color="white" />}
-              // 共通ボタンのレイアウトを活かしつつ、色と角丸だけ上書き
               style={styles.healthButton}
-              textStyle={styles.healthButtonText}
+              textStyle={{ fontSize: 12 }}
             />
             <Text style={styles.attributionText}>{t('record.dataFromHealth')}</Text>
           </View>
         )}
 
-        {/* 運動リスト */}
+        {/* --- 運動メニューセクション --- */}
         <Card>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('record.exerciseMenu')}</Text>
@@ -188,39 +242,108 @@ export const RecordForm = () => {
             variant="outline"
             icon={<Ionicons name="add" size={20} color="#3B82F6" />}
             onPress={handleAddActivity}
-            // styleでflexなどを再定義せず、Button内部に任せる
             style={styles.addButton}
           />
         </Card>
 
-        {/* 入力フォーム */}
+        {/* --- 詳細入力セクション --- */}
         <Card style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{t('record.weight')}</Text>
-          <RecordFormInputs
-            weight={weight}
-            setWeight={setWeight}
-            comment={comment}
-            setComment={setComment}
-            imageUris={imageUris}
-            setImageUris={setImageUris}
-            postToTimeline={postToTimeline}
-            setPostToTimeline={setPostToTimeline}
+          <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>記録の詳細</Text>
+
+          {/* 体重入力 */}
+          <Controller
+            control={control}
+            name="weight"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label={`${t('record.weight')} (kg)`}
+                placeholder="60.5"
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                keyboardType="numeric"
+                error={errors.weight?.message}
+                containerStyle={styles.inputItem}
+              />
+            )}
+          />
+
+          {/* コメント入力 */}
+          <Controller
+            control={control}
+            name="comment"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label="コメント"
+                placeholder="今日は調子が良かった！"
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                multiline
+                numberOfLines={3}
+                error={errors.comment?.message}
+                containerStyle={styles.inputItem}
+              />
+            )}
+          />
+
+          {/* 画像選択 */}
+          <View style={styles.imageSection}>
+            <Text style={styles.label}>写真 (最大4枚)</Text>
+            <View style={styles.imageGrid}>
+              {imageUris.map((uri, index) => (
+                <View key={index} style={styles.thumbnailContainer}>
+                  <Image source={{ uri }} style={styles.thumbnail} />
+                  <IconButton
+                    name="close"
+                    size={12}
+                    color="white"
+                    style={styles.deleteBadge}
+                    onPress={() => setImageUris(prev => prev.filter((_, i) => i !== index))}
+                  />
+                </View>
+              ))}
+              {imageUris.length < 4 && (
+                <TouchableOpacity style={styles.addImageButton} onPress={pickImage}>
+                  <Ionicons name="camera" size={24} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* タイムライン投稿設定 (ListItem使用) */}
+          <Controller
+            control={control}
+            name="postToTimeline"
+            render={({ field: { onChange, value } }) => (
+              <ListItem
+                title="タイムラインに投稿する"
+                style={{ paddingHorizontal: 0, borderBottomWidth: 0, paddingVertical: 8 }}
+                rightElement={
+                  <Switch
+                    value={value}
+                    onValueChange={onChange}
+                    trackColor={{ false: '#767577', true: '#3B82F6' }}
+                    thumbColor={value ? '#ffffff' : '#f4f3f4'}
+                  />
+                }
+              />
+            )}
           />
         </Card>
 
         {/* 保存ボタン */}
         <Button
           title={t('record.saveRecord')}
-          onPress={handleSave}
-          loading={saving}
+          onPress={handleSubmit(onSubmit)}
+          loading={saving || isSubmitting}
           variant="primary"
-          // Buttonのvariant="primary"に影が含まれているため、追加のstyleは最小限にする
           style={styles.submitButton}
           textStyle={{ fontSize: 18 }}
         />
       </ScrollView>
 
-      {/* モーダル */}
+      {/* --- モーダルコンポーネント --- */}
       <ExerciseSelector
         visible={selectorVisible}
         availableTypes={availableTypes}
@@ -265,19 +388,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1F2937'
   },
-  // ヘッダーボタン周り
   headerButtons: {
     marginBottom: 20,
     alignItems: 'flex-start'
   },
   healthButton: {
-    backgroundColor: '#FA586A', // 専用色
+    backgroundColor: '#FA586A',
     borderRadius: 20,
     borderWidth: 0,
-    // paddingやflex系はButtonコンポーネントのデフォルトを使用
-  },
-  healthButtonText: {
-    fontSize: 12,
   },
   attributionText: {
     fontSize: 10,
@@ -285,7 +403,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 4
   },
-  // リスト周り
   emptyText: {
     textAlign: 'center',
     color: '#9CA3AF',
@@ -294,12 +411,61 @@ const styles = StyleSheet.create({
   },
   addButton: {
     marginTop: 12,
-    borderStyle: 'dashed', // outlineバリアントに追加するスタイルのみ記述
+    borderStyle: 'dashed',
     backgroundColor: '#EFF6FF',
   },
   submitButton: {
     marginTop: 24,
     marginBottom: 40,
-    // variant="primary"で影がついているため、ここでは余白のみ調整
+  },
+  inputItem: {
+    marginBottom: 20,
+  },
+  imageSection: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  thumbnailContainer: {
+    position: 'relative',
+  },
+  thumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+  },
+  deleteBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'white',
+  },
+  addImageButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
   },
 });

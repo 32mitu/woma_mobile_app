@@ -12,6 +12,12 @@ import { useAuth } from '../src/features/auth/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
+// React Hook Form & Zod
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+// ※ src/utils/validationSchemas.ts を作成済みであること
+import { loginSchema, signupSchema, SignupFormData } from '../src/utils/validationSchemas';
+
 // 共通コンポーネント
 import { Button } from '../src/ui/Button';
 import { Input } from '../src/ui/Input';
@@ -19,13 +25,25 @@ import { Input } from '../src/ui/Input';
 export default function LoginScreen() {
   const router = useRouter();
   const { signInWithGoogle, signInWithApple, user, loading: authLoading } = useAuth();
-
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // ソーシャルログイン用のローディング状態
+  const [socialLoading, setSocialLoading] = useState(false);
+
+  // フォーム設定
+  const { control, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<SignupFormData>({
+    resolver: zodResolver(isLoginMode ? loginSchema : signupSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      username: '',
+    },
+  });
+
+  // モード切替時にフォームをリセット
+  useEffect(() => {
+    reset({ email: '', password: '', username: '' });
+  }, [isLoginMode, reset]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -37,6 +55,74 @@ export default function LoginScreen() {
     Linking.openURL('https://note.com/kumaotoko32/n/ned99f2c17b7c?app_launch=false');
   };
 
+  // フォーム送信ハンドラ (ログイン・登録共通)
+  const onSubmit = async (data: SignupFormData) => {
+    try {
+      if (isLoginMode) {
+        // --- ログイン処理 ---
+        await signInWithEmailAndPassword(auth, data.email, data.password);
+        // 遷移は useEffect で監視しているため不要だが、念のため
+        router.replace('/(tabs)/home');
+      } else {
+        // --- 新規登録処理 ---
+        // スキーマでチェック済みだが、型ガード的に確認
+        if (!data.username) return;
+
+        const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        const newUser = userCredential.user;
+
+        // Firestoreにユーザー情報保存
+        await setDoc(doc(db, "users", newUser.uid), {
+          uid: newUser.uid,
+          username: data.username,
+          email: data.email,
+          bio: "",
+          profileImageUrl: "",
+          createdAt: serverTimestamp(),
+          blockedUsers: [],
+        });
+
+        Alert.alert("登録成功", "アカウントが作成されました！", [
+          { text: "OK", onPress: () => router.replace('/(tabs)/home') }
+        ]);
+      }
+    } catch (error: any) {
+      console.error(error);
+      let msg = "エラーが発生しました";
+      if (error.code === 'auth/email-already-in-use') msg = "このメールアドレスは既に使用されています";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        msg = "メールアドレスまたはパスワードが間違っています";
+      }
+      if (error.code === 'auth/weak-password') msg = "パスワードは6文字以上にしてください";
+
+      Alert.alert("エラー", msg);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setSocialLoading(true);
+      await signInWithGoogle();
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      console.error("Google Login Error:", error);
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      setSocialLoading(true);
+      await signInWithApple();
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      console.error("Apple Login Error:", error);
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
   if (authLoading || user) {
     return (
       <View style={styles.loadingContainer}>
@@ -44,80 +130,6 @@ export default function LoginScreen() {
       </View>
     );
   }
-
-  const handleSignUp = async () => {
-    if (!email || !password || !username) {
-      Alert.alert("エラー", "すべての項目を入力してください");
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = userCredential.user;
-
-      await setDoc(doc(db, "users", newUser.uid), {
-        uid: newUser.uid,
-        username: username,
-        email: email,
-        bio: "",
-        profileImageUrl: "",
-        createdAt: serverTimestamp(),
-        blockedUsers: [],
-      });
-
-      Alert.alert("登録成功", "アカウントが作成されました！", [
-        { text: "OK", onPress: () => router.replace('/(tabs)/home') }
-      ]);
-    } catch (error: any) {
-      let msg = "登録に失敗しました";
-      if (error.code === 'auth/email-already-in-use') msg = "このメールアドレスは既に使用されています";
-      if (error.code === 'auth/weak-password') msg = "パスワードは6文字以上にしてください";
-      Alert.alert("エラー", msg);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("エラー", "メールアドレスとパスワードを入力してください");
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/(tabs)/home');
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert("ログイン失敗", "メールアドレスまたはパスワードが間違っています");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    try {
-      setIsSubmitting(true);
-      await signInWithGoogle();
-      router.replace('/(tabs)/home');
-    } catch (error) {
-      console.error("Google Login Error:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAppleLogin = async () => {
-    try {
-      setIsSubmitting(true);
-      await signInWithApple();
-      router.replace('/(tabs)/home');
-    } catch (error) {
-      console.error("Apple Login Error:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -135,38 +147,62 @@ export default function LoginScreen() {
           <View style={styles.formContainer}>
             {/* ユーザー名 (新規登録時のみ) */}
             {!isLoginMode && (
-              <Input
-                label="ユーザー名"
-                placeholder="表示名を入力"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
+              <Controller
+                control={control}
+                name="username"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="ユーザー名"
+                    placeholder="表示名を入力"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    error={errors.username?.message} // エラー表示
+                    autoCapitalize="none"
+                  />
+                )}
               />
             )}
 
-            <Input
-              label="メールアドレス"
-              placeholder="example@woma.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="メールアドレス"
+                  placeholder="example@woma.com"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.email?.message} // エラー表示
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              )}
             />
 
-            <Input
-              label="パスワード"
-              placeholder="6文字以上"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <Input
+                  label="パスワード"
+                  placeholder="6文字以上"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  error={errors.password?.message} // エラー表示
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              )}
             />
 
             {/* メインアクションボタン */}
             <Button
               title={isLoginMode ? 'ログイン' : '新規登録'}
-              onPress={isLoginMode ? handleLogin : handleSignUp}
-              loading={isSubmitting}
+              onPress={handleSubmit(onSubmit)} // handleSubmitでラップ
+              loading={isSubmitting || socialLoading}
               variant="primary"
               style={styles.mainButton}
             />
@@ -190,7 +226,6 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.socialButtonsContainer}>
-              {/* Apple Login */}
               <AppleAuthentication.AppleAuthenticationButton
                 buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                 buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
@@ -199,17 +234,15 @@ export default function LoginScreen() {
                 onPress={handleAppleLogin}
               />
 
-              {/* Google Login (共通Buttonを使用) */}
               <Button
                 title="Googleで続ける"
                 variant="secondary"
                 icon={<Ionicons name="logo-google" size={20} color="#DB4437" />}
                 onPress={handleGoogleLogin}
-                disabled={isSubmitting}
-                textStyle={styles.googleButtonText} // Googleだけ文字色を調整したい場合
+                disabled={isSubmitting || socialLoading}
+                textStyle={styles.googleButtonText}
               />
             </View>
-            {/* ------------------------- */}
 
             {/* モード切り替え */}
             <Button
@@ -253,7 +286,7 @@ const styles = StyleSheet.create({
 
   socialButtonsContainer: { gap: 12 },
   appleButton: { width: '100%', height: 50 },
-  googleButtonText: { color: '#374151' }, // Secondaryボタンの文字色微調整
+  googleButtonText: { color: '#374151' },
 
   // 規約同意
   termsContainer: { marginTop: 12, alignItems: 'center' },

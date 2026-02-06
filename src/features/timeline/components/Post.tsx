@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { View, Text, StyleSheet, Dimensions, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
@@ -17,161 +17,182 @@ import { Badge } from '../../../ui/Badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type PostProps = {
-  post: {
-    id: string;
-    userId?: string;
-    text: string;
-    imageUrls?: string[];
-    likes: number;
-    comments?: number;
-    timestamp: any;
-    user?: { // 投稿者情報がpostオブジェクトに含まれている場合への対応
-      displayName?: string;
-      photoURL?: string;
-    };
-    activities?: {
-      name: string;
-      duration: number;
-      mets?: number;
-      steps?: number;
-    }[];
+// Propsの型定義を明確化
+type PostData = {
+  id: string;
+  userId?: string;
+  text: string;
+  imageUrls?: string[];
+  likes: number;
+  comments?: number;
+  timestamp: any;
+  user?: {
+    displayName?: string;
+    photoURL?: string;
   };
+  activities?: {
+    name: string;
+    duration: number;
+    mets?: number;
+    steps?: number;
+  }[];
 };
 
-export const Post = ({ post }: PostProps) => {
+type PostProps = {
+  post: PostData;
+};
+
+// コンポーネント定義
+const PostComponent = ({ post }: PostProps) => {
   const router = useRouter();
   const { t } = useTranslation();
   const { sendPushNotification } = usePushNotifications();
-
-  const [likes, setLikes] = useState(post.likes || 0);
-  const [commentsCount, setCommentsCount] = useState(post.comments || 0);
-  const [liked, setLiked] = useState(false); // 本来はサブコレクションで確認すべきだが簡易実装
+  const [likes, setLikes] = useState(post.likes);
+  const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [author, setAuthor] = useState<{ name: string; photo: string | null }>({
-    name: post.user?.displayName || "ユーザー",
-    photo: post.user?.photoURL || null
-  });
+  const [userInfo, setUserInfo] = useState<{ displayName: string; photoURL: string } | null>(
+    post.user ? { displayName: post.user.displayName || '名無し', photoURL: post.user.photoURL || '' } : null
+  );
 
   const currentUser = auth.currentUser;
-  const isMyPost = currentUser?.uid === post.userId;
+  const isOwner = currentUser && post.userId === currentUser.uid;
 
+  // ユーザー情報の非同期取得 (post.userがない場合のみ)
   useEffect(() => {
-    // 投稿者情報の取得 (postに情報が含まれていない場合のフォールバック)
-    const fetchAuthor = async () => {
-      if (post.user) return; // 既に情報があればスキップ
-      if (post.userId) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", post.userId));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setAuthor({
-              name: data.displayName || data.username || "ユーザー",
-              photo: data.profileImageUrl || data.photoURL || null
-            });
-          }
-        } catch (e) {
-          console.error(e);
+    if (userInfo) return; // 既に情報があればスキップ
+    if (!post.userId) return;
+
+    let isMounted = true;
+    const fetchUser = async () => {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', post.userId!));
+        if (userSnap.exists() && isMounted) {
+          const data = userSnap.data();
+          setUserInfo({
+            displayName: data.username || data.displayName || '名無し',
+            photoURL: data.profileImageUrl || data.photoURL || '',
+          });
         }
+      } catch (error) {
+        console.log('User fetch error:', error);
       }
     };
-    fetchAuthor();
-  }, [post.userId, post.user]);
+    fetchUser();
+    return () => { isMounted = false; };
+  }, [post.userId, userInfo]);
 
+  // 「いいね」機能
   const handleLike = async () => {
-    const newLiked = !liked;
-    setLiked(newLiked);
-    setLikes((prev) => (newLiked ? prev + 1 : prev - 1));
+    if (!currentUser) {
+      Alert.alert(t('common.error'), t('auth.loginRequired'));
+      return;
+    }
+    if (liked) return; // 連打防止（簡易版）
+
+    // UIの即時反映 (Optimistic UI)
+    setLiked(true);
+    setLikes((prev) => prev + 1);
 
     try {
-      const postRef = doc(db, "timeline", post.id);
-      await updateDoc(postRef, {
-        likes: increment(newLiked ? 1 : -1)
-      });
+      const postRef = doc(db, 'posts', post.id);
+      await updateDoc(postRef, { likes: increment(1) });
 
-      if (newLiked && post.userId && post.userId !== currentUser?.uid) {
-        const authorDoc = await getDoc(doc(db, "users", post.userId));
-        if (authorDoc.exists()) {
-          const authorData = authorDoc.data();
-          if (authorData.pushToken) {
-            await sendPushNotification(
-              authorData.pushToken,
-              "いいね！",
-              `${currentUser?.displayName || "誰か"}があなたの投稿にいいねしました`
-            );
-          }
-        }
+      // 通知送信 (自分以外の場合)
+      if (post.userId && post.userId !== currentUser.uid) {
+        await sendPushNotification(
+          post.userId,
+          t('notification.likeTitle', 'いいね！'),
+          t('notification.likeBody', 'あなたの投稿にいいねがつきました！')
+        );
       }
     } catch (error) {
-      console.error("Error updating like: ", error);
-      // ロールバック
-      setLiked(!newLiked);
-      setLikes((prev) => (newLiked ? prev - 1 : prev + 1));
+      console.error('Like error:', error);
+      // エラー時はロールバック
+      setLiked(false);
+      setLikes((prev) => prev - 1);
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert("削除の確認", "この投稿を削除しますか？", [
-      { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, "timeline", post.id));
-          } catch (e) {
-            Alert.alert("エラー", "削除に失敗しました");
-          }
-        }
-      }
-    ]);
+  // 削除機能
+  const handleDelete = async () => {
+    Alert.alert(
+      t('common.delete'),
+      t('timeline.deleteConfirm', '本当に削除しますか？'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'posts', post.id));
+              // 親側で再取得が必要だが、Firestoreリスナーなら自動消滅する
+            } catch (error) {
+              Alert.alert(t('common.error'), t('common.errorOccurred'));
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleUserPress = () => {
     if (post.userId) {
-      router.push(`/public/${post.userId}`);
+      // (tabs)外への遷移の場合があるのでパスを調整
+      // または router.push(`/public/${post.userId}`) でも可
+      // 現在の構造に合わせて遷移
+      router.push({ pathname: '/public/[uid]', params: { uid: post.userId } });
     }
   };
 
   return (
-    <Card padding="none" style={styles.card}>
+    <Card style={styles.card} padding="none">
       {/* ヘッダー */}
       <View style={styles.header}>
-        <View style={styles.userInfo} onTouchEnd={handleUserPress}>
-          <Avatar uri={author.photo} size="sm" />
+        <View style={styles.userInfo}>
+          <Avatar
+            uri={userInfo?.photoURL}
+            size="sm"
+          // Avatar自体にonPressはないためTouchableOpacityでラップするか、Avatarの実装依存
+          // ここではAvatarタップイベントがないので外側をラップする想定ですが、
+          // Avatarの仕様次第。ここでは簡易的にViewのまま、名前部分をタップ可能にします。
+          />
           <View style={styles.texts}>
-            <Text style={styles.username}>{author.name}</Text>
-            <Text style={styles.date}>
-              {post.timestamp ? timeAgo(post.timestamp) : '投稿中...'}
+            <Text style={styles.username} onPress={handleUserPress}>
+              {userInfo?.displayName || 'Loading...'}
             </Text>
+            <Text style={styles.date}>{timeAgo(post.timestamp)}</Text>
           </View>
         </View>
 
-        {isMyPost && (
+        {isOwner && (
           <IconButton
             name="trash-outline"
             size={20}
-            color="#EF4444"
+            color="#9CA3AF"
             onPress={handleDelete}
           />
         )}
       </View>
 
-      {/* 本文 */}
-      <View style={styles.content}>
-        <RenderTextWithHashtags text={post.text} />
-      </View>
+      {/* テキストコンテンツ */}
+      {post.text ? (
+        <View style={styles.content}>
+          <RenderTextWithHashtags text={post.text} />
+        </View>
+      ) : null}
 
-      {/* 活動タグ (Badgeを使用) */}
+      {/* アクティビティタグ */}
       {post.activities && post.activities.length > 0 && (
         <View style={styles.activityContainer}>
           {post.activities.map((act, idx) => (
             <Badge
               key={idx}
-              label={`${act.name} ${act.duration > 0 ? act.duration + '分' : (act.steps || 0) + '歩'}`}
-              variant="outline"
+              label={`${act.name} ${act.duration}分`}
+              variant="default"
               color="primary"
               size="sm"
+              icon={<Text style={{ fontSize: 10 }}>🏃</Text>}
             />
           ))}
         </View>
@@ -184,20 +205,19 @@ export const Post = ({ post }: PostProps) => {
             source={{ uri: post.imageUrls[0] }}
             style={styles.postImage}
             contentFit="cover"
-            transition={500}
+            transition={200}
           />
-          {/* 複数枚ある場合のインジケーターなどは省略またはBadgeで実装可能 */}
           {post.imageUrls.length > 1 && (
-            <View style={styles.imageCounter}>
-              <Badge label={`1 / ${post.imageUrls.length}`} variant="ghost" color="secondary" />
+            <View style={styles.imageCountBadge}>
+              <Text style={styles.imageCountText}>+{post.imageUrls.length - 1}</Text>
             </View>
           )}
         </View>
       )}
 
-      {/* フッターアクション (IconButtonを使用) */}
-      <View style={styles.footer}>
-        <View style={styles.actionItem}>
+      {/* アクションボタン */}
+      <View style={styles.actions}>
+        <View style={styles.actionButton}>
           <IconButton
             name={liked ? "heart" : "heart-outline"}
             size={24}
@@ -207,25 +227,21 @@ export const Post = ({ post }: PostProps) => {
           <Text style={styles.actionText}>{likes}</Text>
         </View>
 
-        <View style={styles.actionItem}>
+        <View style={styles.actionButton}>
           <IconButton
             name="chatbubble-outline"
             size={22}
             color="#4B5563"
             onPress={() => setShowComments(!showComments)}
           />
-          <Text style={styles.actionText}>{commentsCount}</Text>
+          <Text style={styles.actionText}>{post.comments || 0}</Text>
         </View>
       </View>
 
       {/* コメントセクション */}
       {showComments && (
-        <View style={styles.commentSection}>
-          <CommentSection
-            postId={post.id}
-            postAuthorId={post.userId}
-            onCommentAdded={() => setCommentsCount(prev => prev + 1)}
-          />
+        <View style={styles.commentSectionWrapper}>
+          <CommentSection postId={post.id} />
         </View>
       )}
     </Card>
@@ -235,6 +251,8 @@ export const Post = ({ post }: PostProps) => {
 const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
+    marginHorizontal: 16, // 画面端に少し余白を持たせる
+    overflow: 'hidden', // 画像の角丸用
   },
   header: {
     flexDirection: 'row',
@@ -260,19 +278,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   content: {
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   activityContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     marginBottom: 12,
     gap: 8,
   },
   imageWrapper: {
     width: '100%',
-    height: SCREEN_WIDTH * 0.8, // アスペクト比調整
+    height: SCREEN_WIDTH * 0.8, // アスペクト比固定
     backgroundColor: '#F3F4F6',
     position: 'relative',
   },
@@ -280,33 +298,53 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  imageCounter: {
+  imageCountBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    right: 10,
+    bottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  footer: {
+  imageCountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  actions: {
     flexDirection: 'row',
-    padding: 8,
-    borderTopWidth: 1,
+    padding: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#F3F4F6',
   },
-  actionItem: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 24,
-    paddingHorizontal: 8,
   },
   actionText: {
-    fontSize: 14,
-    color: '#6B7280',
     marginLeft: 4,
-    fontWeight: '600',
+    color: '#4B5563',
+    fontSize: 14,
   },
-  commentSection: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
+  commentSectionWrapper: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+    paddingBottom: 8,
+  }
+});
+
+// React.memo でラップし、再レンダリングを制御
+export const Post = memo(PostComponent, (prevProps, nextProps) => {
+  // id, likes, comments, text, 画像URLなどが変わっていないかチェック
+  // 深い比較 (activitiesなど) はコストがかかるため、主要な更新ポイントだけ比較
+  return (
+    prevProps.post.id === nextProps.post.id &&
+    prevProps.post.likes === nextProps.post.likes &&
+    prevProps.post.comments === nextProps.post.comments &&
+    prevProps.post.text === nextProps.post.text &&
+    prevProps.post.timestamp === nextProps.post.timestamp
+  );
 });
