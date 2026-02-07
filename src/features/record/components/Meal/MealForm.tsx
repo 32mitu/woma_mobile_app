@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../../ui/Button';
 import { Input } from '../../../../ui/Input';
 import { Card } from '../../../../ui/Card';
+import { ListItem } from '../../../../ui/ListItem'; // 追加
+import { IconButton } from '../../../../ui/IconButton'; // 追加
+import { BarcodeScanner, ScannedFoodData } from './BarcodeScanner';
 
 export const MealForm = () => {
     const { control, handleSubmit } = useForm({
@@ -12,26 +15,72 @@ export const MealForm = () => {
         },
     });
 
+    const [isScannerVisible, setScannerVisible] = useState(false);
+    const [scannedItems, setScannedItems] = useState<ScannedFoodData[]>([]);
+
     const onSubmit = (data: any) => {
-        Alert.alert('開発中', '食事記録機能は次週実装予定です！\n(バーコード検索・栄養計算など)');
+        console.log('保存データ:', { ...data, items: scannedItems });
+        Alert.alert('保存完了', `食事: ${scannedItems.length}件\nメモ: ${data.comment}`);
     };
+
+    const handleScanned = (data: ScannedFoodData) => {
+        setScannedItems(prev => [...prev, data]);
+    };
+
+    const removeItem = (index: number) => {
+        setScannedItems(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const totalCalories = scannedItems.reduce((sum, item) => sum + item.calories, 0);
 
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.pageTitle}>今日の食事</Text>
 
-                {/* 開発中プレースホルダー */}
-                <View style={styles.placeholderContainer}>
-                    <Text style={styles.emoji}>🍱</Text>
-                    <Text style={styles.placeholderTitle}>食事記録機能</Text>
-                    <Text style={styles.placeholderText}>
-                        バーコード読み取りや{'\n'}食品データベース検索を準備中です。{'\n'}次週のアップデートをお楽しみに！
+                {/* スキャンボタンエリア */}
+                <View style={styles.actionContainer}>
+                    <Button
+                        title="バーコードをスキャン"
+                        onPress={() => setScannerVisible(true)}
+                        variant="primary"
+                        icon={<Text style={{ fontSize: 18, marginRight: 8 }}>📷</Text>}
+                    />
+                    <Text style={styles.helperText}>
+                        商品バーコードを読み取って自動入力
                     </Text>
-                    <View style={styles.disabledButtonContainer}>
-                        <Button title="📸 写真で解析 (AI)" variant="outline" size="sm" disabled />
-                    </View>
                 </View>
+
+                {/* スキャン済みリスト (ListItemを使用) */}
+                {scannedItems.length > 0 && (
+                    <Card style={styles.listCard} padding="none">
+                        <View style={styles.listHeader}>
+                            <Text style={styles.sectionTitle}>食べたもの ({scannedItems.length})</Text>
+                        </View>
+
+                        {scannedItems.map((item, index) => (
+                            <ListItem
+                                key={index}
+                                title={item.name}
+                                subtitle={`${item.calories} kcal`}
+                                rightElement={
+                                    <IconButton
+                                        name="trash-outline"
+                                        size={20}
+                                        color="#EF4444"
+                                        onPress={() => removeItem(index)}
+                                    />
+                                }
+                                style={index === scannedItems.length - 1 ? { borderBottomWidth: 0 } : {}}
+                            />
+                        ))}
+
+                        <View style={styles.totalRow}>
+                            <Text style={styles.totalLabel}>合計:</Text>
+                            <Text style={styles.totalValue}>{totalCalories} kcal</Text>
+                        </View>
+                    </Card>
+                )}
 
                 {/* 食事メモ */}
                 <Card style={styles.section}>
@@ -47,21 +96,28 @@ export const MealForm = () => {
                                 onBlur={onBlur}
                                 onChangeText={onChange}
                                 value={value}
+                                containerStyle={{ marginBottom: 0 }} // Cardのpaddingがあるので調整
                             />
                         )}
                     />
                 </Card>
 
-                {/* 保存ボタン（モック） */}
+                {/* 保存ボタン */}
                 <View style={styles.footer}>
                     <Button
                         title="食事を記録する"
                         onPress={handleSubmit(onSubmit)}
-                        size="lg"
-                        variant="secondary" // 食事は色を変えて区別
+                        size="lg" // Button.tsxにsize定義があれば有効、なければvariantで調整
+                        variant="secondary"
                     />
                 </View>
             </ScrollView>
+
+            <BarcodeScanner
+                visible={isScannerVisible}
+                onClose={() => setScannerVisible(false)}
+                onScanned={handleScanned}
+            />
         </View>
     );
 };
@@ -81,36 +137,48 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: '#1F2937'
     },
-    placeholderContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 40,
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-        borderStyle: 'dashed',
-        borderRadius: 12,
-        backgroundColor: '#F9FAFB',
+    actionContainer: {
         marginBottom: 24,
+        alignItems: 'center',
     },
-    emoji: {
-        fontSize: 40,
-        marginBottom: 8,
-    },
-    placeholderTitle: {
-        color: '#4B5563',
-        fontWeight: 'bold',
-        fontSize: 18,
-    },
-    placeholderText: {
-        color: '#9CA3AF',
-        fontSize: 14,
+    helperText: {
+        color: '#6B7280',
+        fontSize: 12,
         marginTop: 8,
-        textAlign: 'center',
-        lineHeight: 20,
     },
-    disabledButtonContainer: {
-        marginTop: 24,
-        opacity: 0.5,
+    listCard: {
+        marginBottom: 24,
+        overflow: 'hidden', // 角丸を維持
+    },
+    listHeader: {
+        padding: 16,
+        backgroundColor: '#F9FAFB',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#374151',
+    },
+    totalRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#F9FAFB',
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+    },
+    totalLabel: {
+        fontSize: 16,
+        color: '#374151',
+        marginRight: 8,
+    },
+    totalValue: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#10B981',
     },
     section: {
         marginBottom: 24,
