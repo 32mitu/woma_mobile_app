@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
+import { useRouter } from 'expo-router';
 import { Button } from '../../../../ui/Button';
 import { Input } from '../../../../ui/Input';
 import { Card } from '../../../../ui/Card';
-import { ListItem } from '../../../../ui/ListItem'; // 追加
-import { IconButton } from '../../../../ui/IconButton'; // 追加
+import { ListItem } from '../../../../ui/ListItem';
+import { IconButton } from '../../../../ui/IconButton';
 import { BarcodeScanner, ScannedFoodData } from './BarcodeScanner';
 
+// --- Firebase / Auth ---
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../../../auth/useAuth';
+
 export const MealForm = () => {
+    const { user } = useAuth();
+    const router = useRouter();
+    const [isSaving, setIsSaving] = useState(false);
+
     const { control, handleSubmit } = useForm({
         defaultValues: {
             comment: '',
@@ -18,9 +27,48 @@ export const MealForm = () => {
     const [isScannerVisible, setScannerVisible] = useState(false);
     const [scannedItems, setScannedItems] = useState<ScannedFoodData[]>([]);
 
-    const onSubmit = (data: any) => {
-        console.log('保存データ:', { ...data, items: scannedItems });
-        Alert.alert('保存完了', `食事: ${scannedItems.length}件\nメモ: ${data.comment}`);
+    // 保存処理
+    const onSubmit = async (data: any) => {
+        if (!user) {
+            Alert.alert('エラー', 'ログインが必要です');
+            return;
+        }
+
+        if (scannedItems.length === 0 && !data.comment) {
+            Alert.alert('エラー', '食べたものかメモを入力してください');
+            return;
+        }
+
+        setIsSaving(true);
+        const totalCalories = scannedItems.reduce((sum, item) => sum + item.calories, 0);
+
+        try {
+            const db = getFirestore();
+
+            // meal_records コレクションに保存
+            await addDoc(collection(db, 'meal_records'), {
+                userId: user.uid,             // ユーザーID
+                type: 'meal',                 // 記録タイプ
+                items: scannedItems,          // 食品リスト
+                comment: data.comment,        // メモ
+                totalCalories: totalCalories, // 合計カロリー
+                createdAt: serverTimestamp(), // サーバー時間
+                date: new Date().toISOString() // アプリ側の日時
+            });
+
+            Alert.alert('保存完了', '食事の記録を保存しました！', [
+                {
+                    text: 'OK',
+                    onPress: () => router.back()
+                }
+            ]);
+
+        } catch (e: any) {
+            console.error("Error adding document: ", e);
+            Alert.alert('保存エラー', 'データの保存に失敗しました。通信環境を確認してください。');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleScanned = (data: ScannedFoodData) => {
@@ -38,20 +86,19 @@ export const MealForm = () => {
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.pageTitle}>今日の食事</Text>
 
-                {/* スキャンボタンエリア */}
                 <View style={styles.actionContainer}>
                     <Button
                         title="バーコードをスキャン"
                         onPress={() => setScannerVisible(true)}
                         variant="primary"
                         icon={<Text style={{ fontSize: 18, marginRight: 8 }}>📷</Text>}
+                        disabled={isSaving}
                     />
                     <Text style={styles.helperText}>
                         商品バーコードを読み取って自動入力
                     </Text>
                 </View>
 
-                {/* スキャン済みリスト (ListItemを使用) */}
                 {scannedItems.length > 0 && (
                     <Card style={styles.listCard} padding="none">
                         <View style={styles.listHeader}>
@@ -69,6 +116,7 @@ export const MealForm = () => {
                                         size={20}
                                         color="#EF4444"
                                         onPress={() => removeItem(index)}
+                                        disabled={isSaving}
                                     />
                                 }
                                 style={index === scannedItems.length - 1 ? { borderBottomWidth: 0 } : {}}
@@ -82,7 +130,6 @@ export const MealForm = () => {
                     </Card>
                 )}
 
-                {/* 食事メモ */}
                 <Card style={styles.section}>
                     <Controller
                         control={control}
@@ -96,22 +143,30 @@ export const MealForm = () => {
                                 onBlur={onBlur}
                                 onChangeText={onChange}
                                 value={value}
-                                containerStyle={{ marginBottom: 0 }} // Cardのpaddingがあるので調整
+                                containerStyle={{ marginBottom: 0 }}
+                                editable={!isSaving}
                             />
                         )}
                     />
                 </Card>
 
-                {/* 保存ボタン */}
                 <View style={styles.footer}>
                     <Button
-                        title="食事を記録する"
+                        title={isSaving ? "保存中..." : "食事を記録する"}
                         onPress={handleSubmit(onSubmit)}
-                        size="lg" // Button.tsxにsize定義があれば有効、なければvariantで調整
+                        size="lg"
                         variant="secondary"
+                        disabled={isSaving}
                     />
                 </View>
             </ScrollView>
+
+            {isSaving && (
+                <View style={styles.savingOverlay}>
+                    <ActivityIndicator size="large" color="#3B82F6" />
+                    <Text style={{ marginTop: 10, fontWeight: 'bold', color: '#fff' }}>クラウドに保存中...</Text>
+                </View>
+            )}
 
             <BarcodeScanner
                 visible={isScannerVisible}
@@ -148,7 +203,7 @@ const styles = StyleSheet.create({
     },
     listCard: {
         marginBottom: 24,
-        overflow: 'hidden', // 角丸を維持
+        overflow: 'hidden',
     },
     listHeader: {
         padding: 16,
@@ -186,5 +241,12 @@ const styles = StyleSheet.create({
     footer: {
         marginTop: 10,
         paddingBottom: 40,
+    },
+    savingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999,
     }
 });
