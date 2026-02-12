@@ -1,11 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Dimensions } from 'react-native';
-import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, ActivityIndicator, Dimensions, Alert, Image, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { IconButton } from '../../../../ui/IconButton';
 import { Button } from '../../../../ui/Button';
 import { Card } from '../../../../ui/Card';
 import { Input } from '../../../../ui/Input';
+import { Badge } from '../../../../ui/Badge';
+// 楽天APIユーティリティのインポート
 import { searchRakutenProduct } from '../../../../utils/rakutenApi';
+// Firestore関連
+import { db } from '../../../../../firebaseConfig';
+import { collection, query, where, getDocs, limit, setDoc, doc } from 'firebase/firestore';
 
 interface BarcodeScannerProps {
     visible: boolean;
@@ -17,16 +22,20 @@ export interface ScannedFoodData {
     name: string;
     calories: number;
     barcode: string;
-    source: 'openfoodfacts' | 'rakuten' | 'manual';
+    source: 'openfoodfacts' | 'rakuten' | 'firestore' | 'manual';
+    imageUrl?: string;
+    unitType?: 'serving' | '100g' | 'manual'; // 単位の管理用
+    protein?: number;
+    fat?: number;
+    carbs?: number;
 }
 
-// 画面サイズとスキャン枠のサイズ定義
+// 画面サイズ定義
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SCAN_AREA_WIDTH = 280;
-const SCAN_AREA_HEIGHT = 180;
+const SCAN_AREA_SIZE = 280;
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose, onScanned }) => {
-    const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+    const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('検索中...');
@@ -34,49 +43,47 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
     // 誤検知防止用のState
     const [isScanReady, setIsScanReady] = useState(false);
 
-    // --- 確認・編集モーダル用State ---
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [tempData, setTempData] = useState<ScannedFoodData | null>(null);
-    const [inputName, setInputName] = useState('');
-    const [inputCalories, setInputCalories] = useState('');
+    // UI状態
+    const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+    const [scannedData, setScannedData] = useState<ScannedFoodData | null>(null);
+    const [editedName, setEditedName] = useState('');
+    const [editedCalories, setEditedCalories] = useState('');
 
     useEffect(() => {
-        const getPermissions = async () => {
-            const { status } = await Camera.requestCameraPermissionsAsync();
-            setHasPermission(status === 'granted');
-        };
-
+        if (visible && !permission?.granted) {
+            requestPermission();
+        }
         if (visible) {
-            getPermissions();
             resetScanner();
-
-            // 対策2: 起動直後の誤検知を防ぐため、1秒間はスキャンを無効化
+            // 起動直後の誤検知を防ぐため、1秒間はスキャンを無効化
             setIsScanReady(false);
-            const timer = setTimeout(() => {
-                setIsScanReady(true);
-            }, 1000);
+            const timer = setTimeout(() => setIsScanReady(true), 1000);
             return () => clearTimeout(timer);
         }
-    }, [visible]);
+    }, [visible, permission]);
+
+    const resetScanner = () => {
+        setScanned(false);
+        setConfirmModalVisible(false);
+        setLoading(false);
+        setScannedData(null);
+        setEditedName('');
+        setEditedCalories('');
+        setLoadingMessage('検索中...');
+    };
 
     // スキャン範囲の判定ロジック
     const isBarcodeInArea = (bounds: BarcodeScanningResult['bounds']) => {
-        // boundsの原点（バーコードの左上）
         const { origin, size } = bounds;
-
-        // バーコードの中心座標
         const barcodeCenterX = origin.x + size.width / 2;
         const barcodeCenterY = origin.y + size.height / 2;
 
-        // スキャン枠の範囲（画面中央）
-        const areaLeft = (SCREEN_WIDTH - SCAN_AREA_WIDTH) / 2;
-        const areaRight = areaLeft + SCAN_AREA_WIDTH;
-        const areaTop = (SCREEN_HEIGHT - SCAN_AREA_HEIGHT) / 2;
-        const areaBottom = areaTop + SCAN_AREA_HEIGHT;
+        const areaLeft = (SCREEN_WIDTH - SCAN_AREA_SIZE) / 2;
+        const areaRight = areaLeft + SCAN_AREA_SIZE;
+        const areaTop = (SCREEN_HEIGHT - SCAN_AREA_SIZE * 0.6) / 2; // 高さ比率0.6に合わせる
+        const areaBottom = areaTop + SCAN_AREA_SIZE * 0.6;
 
-        // バーコードの中心が、スキャン枠の中に完全に入っているか（少し余裕を持たせる）
-        // ※枠から少しでもはみ出したらNGにする場合は条件を厳しくする
-        const margin = 20; // 許容誤差ピクセル
+        const margin = 30; // 許容誤差
 
         return (
             barcodeCenterX >= (areaLeft - margin) &&
@@ -86,123 +93,211 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
         );
     };
 
-    const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
-        // 読み取り済み、ロード中、モーダル表示中、または起動待機中は無視
-        if (scanned || loading || showConfirmModal || !isScanReady) return;
+    // ★追加: 公開データベースへの保存処理 (Crowdsourcing)
+    const saveToPublicDb = async (data: ScannedFoodData) => {
+        // 既にFirestoreから取得したデータなら保存不要
+        if (data.source === 'firestore') return;
+        // バーコードがない(手入力など)場合は保存できない(IDがないため)
+        if (!data.barcode) return;
 
-        // 対策1: スキャン枠の外なら無視 (Android/iOSで座標系が異なる場合があるため、try-catchで安全に)
+        try {
+            // publicProducts/{barcode} に保存
+            // setDoc(..., { merge: true }) にすると、既存データがあっても安全に統合できますが、
+            // ここでは「最新のユーザー入力」を正として上書きします。
+            await setDoc(doc(db, 'publicProducts', data.barcode), {
+                name: data.name,
+                calories: data.calories,
+                barcode: data.barcode,
+                // 栄養素情報 (あれば)
+                p: data.protein || 0,
+                f: data.fat || 0,
+                c: data.carbs || 0,
+                // メタデータ
+                unitType: data.unitType || 'manual',
+                imageUrl: data.imageUrl || null,
+                source: 'user_contribution', // 出所を記録
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            });
+            console.log(`[Crowdsourcing] Saved ${data.name} to public DB.`);
+        } catch (error) {
+            // 裏側の処理なので、ユーザーにエラーは見せない (consoleのみ)
+            console.warn("[Crowdsourcing] Failed to save:", error);
+        }
+    };
+
+    const handleBarCodeScanned = async (result: BarcodeScanningResult) => {
+        if (scanned || loading || confirmModalVisible || !isScanReady) return;
+
         try {
             if (result.bounds && !isBarcodeInArea(result.bounds)) {
                 return;
             }
         } catch (e) {
-            // 座標取得に失敗した場合は無視せずに通す（互換性維持）
-            console.warn('Bounds check failed, skipping area check');
+            console.warn('Bounds check skipped');
         }
 
         setScanned(true);
         setLoading(true);
         setLoadingMessage('商品情報を検索中...');
+
         const janCode = result.data;
+        console.log(`Scanned: ${janCode}`);
 
         try {
-            // 1. OpenFoodFacts検索
-            const offResponse = await fetch(`https://world.openfoodfacts.org/api/v2/product/${janCode}.json`);
-            const offJson = await offResponse.json();
+            // --- Tier 0: Firestore (自前DB) ---
+            const q = query(collection(db, 'publicProducts'), where('barcode', '==', janCode), limit(1));
+            const snapshot = await getDocs(q);
 
-            if (offJson.status === 1) {
-                const product = offJson.product;
-                const name = product.product_name_ja || product.product_name || '名称不明';
-                const calories = product.nutriments?.['energy-kcal_100g'] || 0;
-
-                openConfirmModal({
-                    name,
-                    calories: Number(calories),
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                showConfirmModal({
                     barcode: janCode,
-                    source: 'openfoodfacts'
+                    name: data.name,
+                    calories: data.calories,
+                    source: 'firestore',
+                    imageUrl: data.imageUrl,
+                    unitType: data.unitType || 'manual',
+                    protein: data.p,
+                    fat: data.f,
+                    carbs: data.c
                 });
                 return;
             }
 
-            // 2. 楽天API検索 (フォールバック)
-            setLoadingMessage('楽天市場を検索中...');
-            const rakutenData = await searchRakutenProduct(janCode);
+            // --- Tier 1: OpenFoodFacts API ---
+            try {
+                const offRes = await fetch(`https://world.openfoodfacts.org/api/v2/product/${janCode}.json`);
+                const offData = await offRes.json();
 
-            if (rakutenData) {
-                openConfirmModal({
-                    name: rakutenData.name,
-                    calories: 0, // 楽天はカロリーがないので0
-                    barcode: janCode,
-                    source: 'rakuten'
-                });
-            } else {
-                // 3. データなし -> 手動入力用として開く
-                openConfirmModal({
-                    name: '',
-                    calories: 0,
-                    barcode: janCode,
-                    source: 'manual'
-                });
+                if (offData.status === 1) {
+                    const product = offData.product;
+                    const nutriments = product.nutriments || {};
+
+                    let calories = nutriments['energy-kcal_serving'];
+                    let unitType: 'serving' | '100g' = 'serving';
+
+                    if (typeof calories !== 'number') {
+                        calories = nutriments['energy-kcal_100g'];
+                        unitType = '100g';
+                    }
+
+                    calories = typeof calories === 'number' ? Math.round(calories) : 0;
+                    const name = product.product_name_ja || product.product_name || '名称不明な商品';
+
+                    showConfirmModal({
+                        barcode: janCode,
+                        name: name,
+                        calories: calories,
+                        source: 'openfoodfacts',
+                        imageUrl: product.image_front_url,
+                        unitType: unitType,
+                        protein: unitType === 'serving' ? nutriments.proteins_serving : nutriments.proteins_100g,
+                        fat: unitType === 'serving' ? nutriments.fat_serving : nutriments.fat_100g,
+                        carbs: unitType === 'serving' ? nutriments.carbohydrates_serving : nutriments.carbohydrates_100g
+                    });
+                    return;
+                }
+            } catch (e) {
+                console.warn('OpenFoodFacts fetch error', e);
             }
+
+            // --- Tier 2: 楽天API ---
+            try {
+                setLoadingMessage('楽天市場を検索中...');
+                const rakutenItem = await searchRakutenProduct(janCode);
+                if (rakutenItem) {
+                    showConfirmModal({
+                        barcode: janCode,
+                        name: rakutenItem.name,
+                        calories: 0,
+                        source: 'rakuten',
+                        imageUrl: rakutenItem.image,
+                        unitType: 'manual'
+                    });
+                    return;
+                }
+            } catch (e) {
+                console.warn('Rakuten API error', e);
+            }
+
+            // --- ヒットなし (手動入力) ---
+            Alert.alert(
+                "商品が見つかりませんでした",
+                "手動で登録しますか？",
+                [
+                    { text: "再スキャン", onPress: () => { setScanned(false); setLoading(false); } },
+                    {
+                        text: "手入力する",
+                        onPress: () => {
+                            showConfirmModal({
+                                barcode: janCode,
+                                name: "",
+                                calories: 0,
+                                source: 'manual',
+                                unitType: 'manual'
+                            });
+                        }
+                    }
+                ]
+            );
 
         } catch (error) {
             console.error(error);
-            // エラー時も手動入力へ誘導
-            openConfirmModal({
-                name: '',
-                calories: 0,
-                barcode: janCode,
-                source: 'manual'
-            });
-        } finally {
+            Alert.alert("エラー", "データの取得に失敗しました");
+            setScanned(false);
             setLoading(false);
         }
     };
 
-    // 確認モーダルを開く処理
-    const openConfirmModal = (data: ScannedFoodData) => {
+    const showConfirmModal = (data: ScannedFoodData) => {
         setLoading(false);
-        setTempData(data);
-        setInputName(data.name);
-        setInputCalories(data.calories.toString());
-        setShowConfirmModal(true);
+        setScannedData(data);
+        setEditedName(data.name);
+        setEditedCalories(data.calories > 0 ? data.calories.toString() : '');
+        setConfirmModalVisible(true);
     };
 
-    // 確定してリストに追加
     const handleConfirm = () => {
-        if (tempData) {
-            onScanned({
-                ...tempData,
-                name: inputName || '名称不明',
-                calories: Number(inputCalories) || 0,
-            });
-            closeAll();
-        }
-    };
+        if (!scannedData) return;
 
-    const closeAll = () => {
-        setShowConfirmModal(false);
-        setTempData(null);
+        const finalCalories = Number(editedCalories) || 0;
+
+        const finalData: ScannedFoodData = {
+            ...scannedData,
+            name: editedName,
+            calories: finalCalories,
+        };
+
+        // 1. 親コンポーネントへ渡す (UI更新)
+        onScanned(finalData);
+
+        // 2. ★裏側で共有DBに保存 (Crowdsourcing)
+        // データソースがFirestore以外で、かつ有効なデータ（カロリー0以外など）なら保存
+        if (finalData.source !== 'firestore' && (finalData.calories > 0 || finalData.name !== '')) {
+            // awaitしない (Fire and forget)
+            saveToPublicDb(finalData);
+        }
+
+        resetScanner();
         onClose();
     };
 
-    const resetScanner = () => {
-        setScanned(false);
-        setLoading(false);
-        setShowConfirmModal(false);
-        setTempData(null);
-        // リセット時も少し待機時間を設ける（連続スキャン時の誤爆防止）
-        setIsScanReady(false);
-        setTimeout(() => setIsScanReady(true), 1000);
+    const handleCloseModal = () => {
+        setConfirmModalVisible(false);
+        setScanned(false); // 再スキャン可能に
     };
 
-    if (hasPermission === null) return <View />;
-    if (hasPermission === false) {
+    if (!visible) return null;
+
+    if (!permission) return <View />;
+    if (!permission.granted) {
         return (
             <Modal visible={visible} animationType="slide">
-                <View style={[styles.centerContainer, { backgroundColor: 'white' }]}>
-                    <Text style={{ marginBottom: 20 }}>カメラ権限が必要です</Text>
-                    <Button title="閉じる" onPress={onClose} variant="secondary" />
+                <View style={styles.permissionContainer}>
+                    <Text>カメラの使用許可が必要です</Text>
+                    <Button title="許可する" onPress={requestPermission} />
+                    <Button title="閉じる" variant="secondary" onPress={onClose} />
                 </View>
             </Modal>
         );
@@ -211,97 +306,101 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
             <View style={styles.container}>
-                {/* カメラビュー */}
-                {!showConfirmModal && (
+                {!confirmModalVisible && (
                     <CameraView
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
                         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-                        barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8"] }}
+                        barcodeScannerSettings={{
+                            barcodeTypes: ["ean13", "ean8"],
+                        }}
                     />
                 )}
 
-                {/* スキャン画面のUI */}
-                {!showConfirmModal && (
+                {!confirmModalVisible && (
                     <View style={styles.overlay}>
                         <View style={styles.header}>
                             <View style={styles.iconBackground}>
-                                <IconButton name="close" color="white" size={32} onPress={onClose} />
+                                <IconButton name="close" iconColor="white" onPress={onClose} />
                             </View>
+                            <Text style={styles.headerTitle}>バーコードをスキャン</Text>
                         </View>
 
                         <View style={styles.scanAreaContainer}>
-                            {/* スキャン準備ができるまで枠の色を変えるなどのフィードバックも可能 */}
-                            <View style={[styles.scanArea, !isScanReady && { borderColor: '#888' }]} />
+                            <View style={[styles.scanArea, !isScanReady && { borderColor: '#999' }]} />
                             <Text style={styles.instruction}>
-                                {isScanReady ? 'バーコードを枠内に合わせてください' : '準備中...'}
+                                {loading ? loadingMessage : (isScanReady ? "バーコードを枠内に合わせてください" : "カメラ準備中...")}
                             </Text>
-                        </View>
-
-                        <View style={styles.footer}>
-                            <Button title="キャンセル" onPress={onClose} variant="ghost" textStyle={{ color: 'white' }} style={styles.cancelButton} />
+                            {loading && <ActivityIndicator size="large" color="#4ECDC4" style={{ marginTop: 20 }} />}
                         </View>
                     </View>
                 )}
 
-                {/* ローディング */}
-                {loading && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size="large" color="#fff" />
-                        <Text style={styles.loadingText}>{loadingMessage}</Text>
-                    </View>
-                )}
-
-                {/* 結果確認・編集モーダル */}
-                <Modal visible={showConfirmModal} transparent animationType="fade">
+                <Modal
+                    visible={confirmModalVisible}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={handleCloseModal}
+                >
                     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                        <View style={styles.modalOverlay}>
-                            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
-                                <Card style={styles.confirmCard} padding="large">
-                                    <Text style={styles.confirmTitle}>
-                                        {tempData?.source === 'manual' ? '未登録の商品' : '商品が見つかりました'}
-                                    </Text>
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === "ios" ? "padding" : "height"}
+                            style={styles.modalOverlay}
+                        >
+                            <Card style={styles.confirmCard}>
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>読み取り結果</Text>
+                                    <IconButton name="close" size={20} onPress={handleCloseModal} />
+                                </View>
 
-                                    <Text style={styles.confirmSubtitle}>
-                                        内容を確認・修正して追加してください
-                                    </Text>
-
-                                    <Input
-                                        label="商品名"
-                                        value={inputName}
-                                        onChangeText={setInputName}
-                                        placeholder="例: 伊藤園 おーいお茶"
-                                    />
-
-                                    <Input
-                                        label="カロリー (kcal)"
-                                        value={inputCalories}
-                                        onChangeText={setInputCalories}
-                                        keyboardType="numeric"
-                                        placeholder="0"
-                                        rightElement={<Text style={{ color: '#6B7280', marginRight: 8 }}>kcal</Text>}
-                                    />
-
-                                    {tempData?.source === 'rakuten' && (
-                                        <Text style={styles.helperText}>※楽天APIにはカロリー情報が含まれません。パッケージ裏面を確認して入力してください。</Text>
-                                    )}
-
-                                    <View style={styles.buttonRow}>
-                                        <Button
-                                            title="再スキャン"
-                                            onPress={resetScanner}
-                                            variant="outline"
-                                            style={{ flex: 1, marginRight: 8 }}
-                                        />
-                                        <Button
-                                            title="追加する"
-                                            onPress={handleConfirm}
-                                            variant="primary"
-                                            style={{ flex: 1, marginLeft: 8 }}
-                                        />
+                                {scannedData?.imageUrl && (
+                                    <View style={styles.imageContainer}>
+                                        <Image source={{ uri: scannedData.imageUrl }} style={styles.productImage} resizeMode="contain" />
                                     </View>
-                                </Card>
-                            </KeyboardAvoidingView>
-                        </View>
+                                )}
+
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>商品名</Text>
+                                    <Input
+                                        value={editedName}
+                                        onChangeText={setEditedName}
+                                        placeholder="商品名を入力"
+                                    />
+                                </View>
+
+                                <View style={styles.formGroup}>
+                                    <View style={styles.rowLabel}>
+                                        <Text style={styles.label}>カロリー (kcal)</Text>
+
+                                        {scannedData?.unitType === 'serving' && (
+                                            <Badge label="1包装あたり" color="success" size="sm" />
+                                        )}
+                                        {scannedData?.unitType === '100g' && (
+                                            <Badge label="100gあたり" color="warning" size="sm" />
+                                        )}
+                                    </View>
+                                    <Input
+                                        value={editedCalories}
+                                        onChangeText={setEditedCalories}
+                                        placeholder="0"
+                                        keyboardType="numeric"
+                                        autoFocus={!scannedData?.calories}
+                                    />
+                                </View>
+
+                                {scannedData?.source === 'rakuten' && !scannedData.calories && (
+                                    <Text style={styles.rakutenAlert}>
+                                        ※商品名のみ取得しました。パッケージ裏面のカロリーを入力してください。
+                                    </Text>
+                                )}
+
+                                <Button
+                                    title="リストに追加"
+                                    onPress={handleConfirm}
+                                    style={{ marginTop: 10 }}
+                                />
+                            </Card>
+                        </KeyboardAvoidingView>
                     </TouchableWithoutFeedback>
                 </Modal>
             </View>
@@ -311,32 +410,31 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: 'black' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingVertical: 50 },
-    header: { alignItems: 'flex-end', paddingHorizontal: 20, marginTop: 10 },
+    permissionContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20 },
+    overlay: { flex: 1, justifyContent: 'space-between', paddingVertical: 50 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 },
     iconBackground: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 30, padding: 4 },
+    headerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginLeft: 16, textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 3 },
 
-    // スキャン枠の位置調整
-    scanAreaContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 50 },
+    scanAreaContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 50 },
     scanArea: {
-        width: SCAN_AREA_WIDTH,
-        height: SCAN_AREA_HEIGHT,
+        width: SCAN_AREA_SIZE,
+        height: SCAN_AREA_SIZE * 0.6,
         borderWidth: 2,
-        borderColor: '#00FF00',
-        borderRadius: 12
+        borderColor: '#4ECDC4',
+        borderRadius: 20,
+        backgroundColor: 'transparent'
     },
+    instruction: { color: 'white', marginTop: 20, fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16, overflow: 'hidden' },
 
-    instruction: { color: 'white', marginTop: 20, fontSize: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, overflow: 'hidden' },
-    footer: { alignItems: 'center', marginBottom: 20 },
-    cancelButton: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, paddingHorizontal: 30 },
-    loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-    loadingText: { color: 'white', marginTop: 16, fontWeight: 'bold', fontSize: 16 },
-
-    // モーダル用スタイル
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-    confirmCard: { width: '100%' },
-    confirmTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, color: '#1F2937' },
-    confirmSubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 },
-    helperText: { fontSize: 12, color: '#EF4444', marginBottom: 16 },
-    buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+    modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)', padding: 20 },
+    confirmCard: { width: '100%', maxHeight: '90%', padding: 20, backgroundColor: 'white', borderRadius: 16 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
+    imageContainer: { alignItems: 'center', marginBottom: 15 },
+    productImage: { width: 120, height: 120, borderRadius: 8 },
+    formGroup: { marginBottom: 15 },
+    label: { fontSize: 14, color: '#666', marginBottom: 5 },
+    rowLabel: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+    rakutenAlert: { fontSize: 12, color: '#EF4444', marginBottom: 10, backgroundColor: '#FEF2F2', padding: 8, borderRadius: 6 }
 });
