@@ -1,29 +1,32 @@
-import React, { useState, useEffect, memo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert } from 'react-native';
+import React, { useState, useEffect, memo, useMemo } from 'react';
+import { View, Text, StyleSheet, Dimensions, Alert, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import { doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from '../../../../firebaseConfig';
 import { RenderTextWithHashtags, timeAgo } from '../utils/timelineUtils';
 import { CommentSection } from './CommentSection';
 import { useRouter } from 'expo-router';
 import { usePushNotifications } from '../../../hooks/usePushNotifications';
 import { useTranslation } from 'react-i18next';
+import { ReactionSelector } from './ReactionSelector';
+import { ReactionType } from '../../../types';
 
 // 共通コンポーネント
 import { Card } from '../../../ui/Card';
 import { Avatar } from '../../../ui/Avatar';
 import { IconButton } from '../../../ui/IconButton';
 import { Badge } from '../../../ui/Badge';
+import { ListItem } from '../../../ui/ListItem';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Propsの型定義を明確化
 type PostData = {
   id: string;
   userId?: string;
   text: string;
   imageUrls?: string[];
   likes: number;
+  reactions?: Record<string, ReactionType>;
   comments?: number;
   timestamp: any;
   user?: {
@@ -42,13 +45,14 @@ type PostProps = {
   post: PostData;
 };
 
-// コンポーネント定義
 const PostComponent = ({ post }: PostProps) => {
   const router = useRouter();
   const { t } = useTranslation();
   const { sendPushNotification } = usePushNotifications();
-  const [likes, setLikes] = useState(post.likes);
-  const [liked, setLiked] = useState(false);
+
+  // State
+  const [localReactions, setLocalReactions] = useState<Record<string, ReactionType>>(post.reactions || {});
+  const [showReactionPalette, setShowReactionPalette] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [userInfo, setUserInfo] = useState<{ displayName: string; photoURL: string } | null>(
     post.user ? { displayName: post.user.displayName || '名無し', photoURL: post.user.photoURL || '' } : null
@@ -57,132 +61,101 @@ const PostComponent = ({ post }: PostProps) => {
   const currentUser = auth.currentUser;
   const isOwner = currentUser && post.userId === currentUser.uid;
 
-  // ユーザー情報の非同期取得 (post.userがない場合のみ)
-  useEffect(() => {
-    if (userInfo) return; // 既に情報があればスキップ
-    if (!post.userId) return;
+  // リアクション計算
+  const myReaction = useMemo(() => {
+    if (!currentUser) return null;
+    return localReactions[currentUser.uid] || null;
+  }, [localReactions, currentUser]);
 
+  const reactionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    Object.values(localReactions).forEach(r => {
+      counts[r] = (counts[r] || 0) + 1;
+      total++;
+    });
+    if (total === 0 && post.likes > 0) return { total: post.likes, topReaction: 'like' as ReactionType };
+    return { total, topReaction: Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] as ReactionType || 'like', counts };
+  }, [localReactions, post.likes]);
+
+  const reactionEmojis: Record<string, string> = { like: '❤️', fire: '🔥', muscle: '💪', clap: '👏', love: '😍' };
+  const mainIconColor = myReaction ? '#EF4444' : '#4B5563';
+
+  // ユーザー情報取得
+  useEffect(() => {
+    if (userInfo || !post.userId) return;
     let isMounted = true;
-    const fetchUser = async () => {
-      try {
-        const userSnap = await getDoc(doc(db, 'users', post.userId!));
-        if (userSnap.exists() && isMounted) {
-          const data = userSnap.data();
-          setUserInfo({
-            displayName: data.username || data.displayName || '名無し',
-            photoURL: data.profileImageUrl || data.photoURL || '',
-          });
-        }
-      } catch (error) {
-        console.log('User fetch error:', error);
+    getDoc(doc(db, 'users', post.userId)).then(snap => {
+      if (snap.exists() && isMounted) {
+        const data = snap.data();
+        setUserInfo({ displayName: data.username || data.displayName || '名無し', photoURL: data.profileImageUrl || data.photoURL || '' });
       }
-    };
-    fetchUser();
+    });
     return () => { isMounted = false; };
   }, [post.userId, userInfo]);
 
-  // 「いいね」機能
-  const handleLike = async () => {
-    if (!currentUser) {
-      Alert.alert(t('common.error'), t('auth.loginRequired'));
-      return;
-    }
-    if (liked) return; // 連打防止（簡易版）
+  // リアクション処理
+  const handleReaction = async (type: ReactionType) => {
+    if (!currentUser) return Alert.alert(t('common.error'), t('auth.loginRequired'));
 
-    // UIの即時反映 (Optimistic UI)
-    setLiked(true);
-    setLikes((prev) => prev + 1);
+    // パレットを閉じる
+    setShowReactionPalette(false);
+
+    const previousReactions = { ...localReactions };
+    const isRemoving = myReaction === type;
+
+    // 即時反映
+    setLocalReactions(prev => {
+      const next = { ...prev };
+      isRemoving ? delete next[currentUser.uid] : (next[currentUser.uid] = type);
+      return next;
+    });
 
     try {
       const postRef = doc(db, 'posts', post.id);
-      await updateDoc(postRef, { likes: increment(1) });
+      await updateDoc(postRef, {
+        [`reactions.${currentUser.uid}`]: isRemoving ? deleteField() : type
+      });
 
-      // 通知送信 (自分以外の場合)
-      if (post.userId && post.userId !== currentUser.uid) {
-        await sendPushNotification(
-          post.userId,
-          t('notification.likeTitle', 'いいね！'),
-          t('notification.likeBody', 'あなたの投稿にいいねがつきました！')
-        );
+      if (!isRemoving && post.userId && post.userId !== currentUser.uid && (!previousReactions[currentUser.uid] || previousReactions[currentUser.uid] !== type)) {
+        await sendPushNotification(post.userId, t('notification.reactionTitle'), `${userInfo?.displayName || '誰か'}が${reactionEmojis[type]}しました`);
       }
     } catch (error) {
-      console.error('Like error:', error);
-      // エラー時はロールバック
-      setLiked(false);
-      setLikes((prev) => prev - 1);
+      setLocalReactions(previousReactions);
     }
   };
 
-  // 削除機能
   const handleDelete = async () => {
-    Alert.alert(
-      t('common.delete'),
-      t('timeline.deleteConfirm', '本当に削除しますか？'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, 'posts', post.id));
-              // 親側で再取得が必要だが、Firestoreリスナーなら自動消滅する
-            } catch (error) {
-              Alert.alert(t('common.error'), t('common.errorOccurred'));
-            }
-          },
-        },
-      ]
-    );
+    Alert.alert(t('common.delete'), t('timeline.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => deleteDoc(doc(db, 'posts', post.id)) },
+    ]);
   };
 
   const handleUserPress = () => {
-    if (post.userId) {
-      // (tabs)外への遷移の場合があるのでパスを調整
-      // または router.push(`/public/${post.userId}`) でも可
-      // 現在の構造に合わせて遷移
-      router.push({ pathname: '/public/[uid]', params: { uid: post.userId } });
-    }
+    if (post.userId) router.push({ pathname: '/public/[uid]', params: { uid: post.userId } });
   };
 
   return (
     <Card style={styles.card} padding="none">
-      {/* ヘッダー */}
-      <View style={styles.header}>
-        <View style={styles.userInfo}>
-          <Avatar
-            uri={userInfo?.photoURL}
-            size="sm"
-          // Avatar自体にonPressはないためTouchableOpacityでラップするか、Avatarの実装依存
-          // ここではAvatarタップイベントがないので外側をラップする想定ですが、
-          // Avatarの仕様次第。ここでは簡易的にViewのまま、名前部分をタップ可能にします。
-          />
-          <View style={styles.texts}>
-            <Text style={styles.username} onPress={handleUserPress}>
-              {userInfo?.displayName || 'Loading...'}
-            </Text>
-            <Text style={styles.date}>{timeAgo(post.timestamp)}</Text>
-          </View>
-        </View>
+      <ListItem
+        leftElement={<Avatar uri={userInfo?.photoURL} size="sm" />}
+        title={userInfo?.displayName || 'Loading...'}
+        subtitle={timeAgo(post.timestamp)}
+        rightElement={isOwner ? (
+          <IconButton name="trash-outline" size={20} color="#9CA3AF" onPress={handleDelete} />
+        ) : undefined}
+        onPress={handleUserPress}
+        style={styles.headerItem}
+        titleStyle={styles.headerTitle}
+      />
 
-        {isOwner && (
-          <IconButton
-            name="trash-outline"
-            size={20}
-            color="#9CA3AF"
-            onPress={handleDelete}
-          />
-        )}
-      </View>
-
-      {/* テキストコンテンツ */}
       {post.text ? (
         <View style={styles.content}>
           <RenderTextWithHashtags text={post.text} />
         </View>
       ) : null}
 
-      {/* アクティビティタグ */}
       {post.activities && post.activities.length > 0 && (
         <View style={styles.activityContainer}>
           {post.activities.map((act, idx) => (
@@ -192,21 +165,15 @@ const PostComponent = ({ post }: PostProps) => {
               variant="default"
               color="primary"
               size="sm"
-              icon={<Text style={{ fontSize: 10 }}>🏃</Text>}
+              icon={<Text style={styles.badgeEmoji}>🏃</Text>}
             />
           ))}
         </View>
       )}
 
-      {/* 画像 */}
       {post.imageUrls && post.imageUrls.length > 0 && (
         <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: post.imageUrls[0] }}
-            style={styles.postImage}
-            contentFit="cover"
-            transition={200}
-          />
+          <Image source={{ uri: post.imageUrls[0] }} style={styles.postImage} contentFit="cover" transition={200} />
           {post.imageUrls.length > 1 && (
             <View style={styles.imageCountBadge}>
               <Text style={styles.imageCountText}>+{post.imageUrls.length - 1}</Text>
@@ -215,30 +182,62 @@ const PostComponent = ({ post }: PostProps) => {
         </View>
       )}
 
-      {/* アクションボタン */}
+      {/* アクションボタンエリア */}
       <View style={styles.actions}>
-        <View style={styles.actionButton}>
-          <IconButton
-            name={liked ? "heart" : "heart-outline"}
-            size={24}
-            color={liked ? "#EF4444" : "#4B5563"}
-            onPress={handleLike}
+        <View style={styles.leftActions}>
+          {/* 1. パレット (表示制御は状態依存) */}
+          <ReactionSelector
+            visible={showReactionPalette}
+            onSelect={handleReaction}
+            currentReaction={myReaction}
           />
-          <Text style={styles.actionText}>{likes}</Text>
+
+          {/* 2. メインリアクションボタン (タップでトグル) */}
+          <TouchableOpacity
+            style={styles.reactionButton}
+            onPress={() => handleReaction(myReaction || 'like')}
+            activeOpacity={0.7}
+          >
+            {myReaction && myReaction !== 'like' ? (
+              <Text style={styles.reactionEmoji}>{reactionEmojis[myReaction]}</Text>
+            ) : (
+              <IconButton
+                name={myReaction === 'like' ? "heart" : "heart-outline"}
+                size={24}
+                color={mainIconColor}
+                style={{ margin: 0, padding: 0 }}
+                // IconButtonのonPressは無効化し、親のTouchableOpacityに任せる
+                pointerEvents="none"
+              />
+            )}
+            <Text style={[styles.actionText, myReaction && { color: mainIconColor, fontWeight: 'bold' }]}>
+              {reactionCounts.total}
+            </Text>
+          </TouchableOpacity>
+
+          {/* 3. パレット展開ボタン (新規追加: いいねの横に配置) */}
+          <IconButton
+            name="happy-outline" // スマイルアイコン
+            size={22}
+            color="#6B7280"
+            onPress={() => setShowReactionPalette(prev => !prev)}
+            style={styles.paletteTrigger}
+          />
         </View>
 
-        <View style={styles.actionButton}>
+        {/* 4. コメントボタン */}
+        <TouchableOpacity style={styles.commentButton} onPress={() => setShowComments(!showComments)}>
           <IconButton
             name="chatbubble-outline"
             size={22}
             color="#4B5563"
-            onPress={() => setShowComments(!showComments)}
+            style={{ margin: 0, padding: 0 }}
+            pointerEvents="none"
           />
           <Text style={styles.actionText}>{post.comments || 0}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
-      {/* コメントセクション */}
       {showComments && (
         <View style={styles.commentSectionWrapper}>
           <CommentSection postId={post.id} />
@@ -251,31 +250,17 @@ const PostComponent = ({ post }: PostProps) => {
 const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
-    marginHorizontal: 16, // 画面端に少し余白を持たせる
-    overflow: 'hidden', // 画像の角丸用
+    marginHorizontal: 16,
+    overflow: 'visible',
+    zIndex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
+  headerItem: {
+    borderBottomWidth: 0,
+    paddingVertical: 12,
+    backgroundColor: 'transparent',
   },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  texts: {
-    marginLeft: 10,
-  },
-  username: {
+  headerTitle: {
     fontWeight: 'bold',
-    fontSize: 15,
-    color: '#1F2937',
-  },
-  date: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2,
   },
   content: {
     paddingHorizontal: 16,
@@ -288,9 +273,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 8,
   },
+  badgeEmoji: {
+    fontSize: 10,
+  },
   imageWrapper: {
     width: '100%',
-    height: SCREEN_WIDTH * 0.8, // アスペクト比固定
+    height: SCREEN_WIDTH * 0.8,
     backgroundColor: '#F3F4F6',
     position: 'relative',
   },
@@ -315,36 +303,56 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'space-between', // 左のアクショングループと右のコメントを離す
   },
-  actionButton: {
+  leftActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 24,
+    position: 'relative', // パレットの基準位置
+    zIndex: 20,
+  },
+  reactionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 40,
+    height: 32,
+    marginRight: 4, // スマイルボタンとの間隔
+  },
+  paletteTrigger: {
+    margin: 0,
+    padding: 4,
+  },
+  commentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 32,
   },
   actionText: {
-    marginLeft: 4,
+    marginLeft: 6,
     color: '#4B5563',
     fontSize: 14,
+  },
+  reactionEmoji: {
+    fontSize: 22,
+    marginHorizontal: 2,
   },
   commentSectionWrapper: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#F3F4F6',
     backgroundColor: '#F9FAFB',
     paddingBottom: 8,
+    zIndex: 1,
   }
 });
 
-// React.memo でラップし、再レンダリングを制御
-export const Post = memo(PostComponent, (prevProps, nextProps) => {
-  // id, likes, comments, text, 画像URLなどが変わっていないかチェック
-  // 深い比較 (activitiesなど) はコストがかかるため、主要な更新ポイントだけ比較
+export const Post = memo(PostComponent, (prev, next) => {
   return (
-    prevProps.post.id === nextProps.post.id &&
-    prevProps.post.likes === nextProps.post.likes &&
-    prevProps.post.comments === nextProps.post.comments &&
-    prevProps.post.text === nextProps.post.text &&
-    prevProps.post.timestamp === nextProps.post.timestamp
+    prev.post.id === next.post.id &&
+    prev.post.likes === next.post.likes &&
+    prev.post.comments === next.post.comments &&
+    prev.post.text === next.post.text &&
+    prev.post.timestamp === next.post.timestamp &&
+    JSON.stringify(prev.post.reactions) === JSON.stringify(next.post.reactions)
   );
 });
