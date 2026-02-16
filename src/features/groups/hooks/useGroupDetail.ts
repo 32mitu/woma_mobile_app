@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
-import { 
-  doc, collection, query, where, onSnapshot, 
-  serverTimestamp, getDocs, addDoc, deleteDoc
+import {
+  doc, collection, query, where, onSnapshot,
+  serverTimestamp, getDocs, writeBatch
 } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
+import { Group } from '../../../types';
 
 export const useGroupDetail = (groupId: string, userId?: string) => {
-  const [group, setGroup] = useState<any>(null);
+  const [group, setGroup] = useState<Group | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
-  
-  // ★追加: リアルタイムで数えたメンバー数
-  const [realtimeMemberCount, setRealtimeMemberCount] = useState(0);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     if (!groupId) return;
@@ -21,31 +20,54 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
     const groupRef = doc(db, 'groups', groupId);
     const unsubGroup = onSnapshot(groupRef, (snap) => {
       if (snap.exists()) {
-        // ここで取得する memberCount は更新されない可能性があるので、
-        // 下記のリアルタイムカウントを優先して使います
-        setGroup({ id: snap.id, ...snap.data() });
+        const data = snap.data();
+        setGroup(prev => ({
+          ...prev,
+          id: snap.id,
+          name: data.name,
+          description: data.description,
+          ownerId: data.createdBy || data.ownerId,
+          photoURL: data.photoURL,
+          challenge: data.challenge,
+          createdAt: data.createdAt,
+          memberIds: prev?.memberIds || [],
+          memberCount: data.memberCount || 0
+        } as Group));
       } else {
         setGroup(null);
       }
-      setLoading(false);
     });
 
-    // 2. メンバー状態 & 人数の監視 (★ここを強化)
-    // このグループのメンバー全データを監視して数える
+    // 2. メンバー一覧の監視
     const membersQuery = query(
       collection(db, 'groupMembers'),
       where('groupId', '==', groupId)
     );
 
     const unsubMembers = onSnapshot(membersQuery, (snapshot) => {
-      // ★実際のデータ数をカウント
-      setRealtimeMemberCount(snapshot.size);
+      const memberIds = snapshot.docs.map(doc => doc.data().userId);
 
-      // 自分が含まれているかチェック
       if (userId) {
-        const isJoined = snapshot.docs.some(doc => doc.data().userId === userId);
-        setIsMember(isJoined);
+        setIsMember(memberIds.includes(userId));
       }
+
+      setGroup(prev => {
+        if (!prev) return null;
+
+        // オーナー判定
+        const currentOwnerId = prev.ownerId;
+        if (userId && currentOwnerId) {
+          setIsOwner(currentOwnerId === userId);
+        }
+
+        return {
+          ...prev,
+          memberIds: memberIds,
+          memberCount: snapshot.size
+        };
+      });
+
+      setLoading(false);
     });
 
     return () => {
@@ -54,43 +76,76 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
     };
   }, [groupId, userId]);
 
-  // 参加・脱退アクション
+  // 参加・脱退
   const toggleJoin = async () => {
     if (!group || !userId) return;
 
     try {
+      const batch = writeBatch(db);
+
       if (isMember) {
-        // --- 脱退処理 ---
+        // 脱退
         const q = query(
           collection(db, 'groupMembers'),
           where('groupId', '==', groupId),
           where('userId', '==', userId)
         );
         const snapshot = await getDocs(q);
-        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
-        
-        // ※ memberCountの更新は行わない (自動カウントに任せる)
-
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
       } else {
-        // --- 参加処理 ---
-        await addDoc(collection(db, 'groupMembers'), {
+        // 参加
+        const memberRef = doc(collection(db, 'groupMembers'));
+        batch.set(memberRef, {
           groupId: groupId,
           userId: userId,
           role: 'member',
           joinedAt: serverTimestamp(),
         });
-        
-        // ※ memberCountの更新は行わない
       }
+      await batch.commit();
     } catch (error) {
-      console.error("参加/脱退エラー:", error);
-      alert("処理に失敗しました。");
+      console.error("Toggle join error:", error);
     }
   };
 
-  // フックが返すデータに、数え直した memberCount を適用して返す
-  const groupWithCount = group ? { ...group, memberCount: realtimeMemberCount } : null;
+  // 削除
+  const deleteGroup = async () => {
+    if (!group || !isOwner) return;
 
-  return { group: groupWithCount, isMember, loading, toggleJoin };
+    try {
+      setLoading(true);
+      const batch = writeBatch(db);
+
+      const q = query(
+        collection(db, 'groupMembers'),
+        where('groupId', '==', groupId)
+      );
+      const snapshot = await getDocs(q);
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      const groupRef = doc(db, 'groups', groupId);
+      batch.delete(groupRef);
+
+      await batch.commit();
+      return true;
+    } catch (error) {
+      console.error("Delete group error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    group,
+    isMember,
+    isOwner,
+    loading,
+    toggleJoin,
+    deleteGroup
+  };
 };
