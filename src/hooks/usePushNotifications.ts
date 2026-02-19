@@ -6,8 +6,8 @@ import { Platform } from 'react-native';
 import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 通知ハンドラの設定（アプリがフォアグラウンドの時も通知を表示する設定）
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -17,6 +17,10 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// ★重要修正: 「処理中」かどうかを判定するメモリ上のロック変数
+// ファイルの外に置くことで、アプリ全体で共有されます。
+let isProcessing = false;
+
 export const usePushNotifications = (userId?: string, shouldRegister: boolean = false) => {
   const router = useRouter();
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
@@ -25,24 +29,22 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   const responseListener = useRef<Notifications.EventSubscription>(null);
 
   useEffect(() => {
-    // 明示的に登録が求められた場合のみ実行
     if (!shouldRegister) return;
 
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
       if (userId && token) {
         saveTokenToFirestore(userId, token);
-        // リマインダー設定（ログイン時など）
-        scheduleDailyReminder();
       }
+
+      // デイリーリマインダーの設定試行
+      scheduleDailyReminder();
     });
 
-    // 通知受信リスナー
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       setNotification(notification);
     });
 
-    // 通知タップリスナー
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.type === 'dm' && data?.partnerId) {
@@ -67,64 +69,58 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     }
   };
 
-  // リマインダー設定（重複チェック機能付き）
   const scheduleDailyReminder = async () => {
+    // ★ロック処理1: メモリ上での即時チェック
+    // すでに誰かが処理を開始していたら、問答無用で帰らせる
+    if (isProcessing) {
+      return;
+    }
+
+    // 処理中フラグを立てて、他の呼び出しをブロックする
+    isProcessing = true;
+
     try {
-      // 1. 現在セットされている通知をすべて確認
-      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+      const today = new Date().toDateString(); // "Mon Feb 16 2026"
+      const STORAGE_KEY = 'WOMA_LAST_REMINDER_SET_DATE';
 
-      // 2. すでに「reminder」タイプの通知があるか探す
-      const existingReminders = scheduledNotifications.filter(
-        (n) => n.content.data?.type === 'reminder'
-      );
+      // ★ロック処理2: ディスク上での永続チェック
+      const lastSetDate = await AsyncStorage.getItem(STORAGE_KEY);
 
-      // 設定したいリマインダーの数
-      const TARGET_REMINDER_COUNT = 1;
-
-      // 3. すでに設定済みなら「何もしない」で終了
-      if (existingReminders.length === TARGET_REMINDER_COUNT) {
+      // 今日すでに完了していれば終了
+      if (lastSetDate === today) {
+        // console.log("Already scheduled for today (AsyncStorage check).");
         return;
       }
 
-      // 4. 数が合わない場合は、一旦reminder系をすべて削除して再登録
-      // ログ出力は削除
+      // --- 設定処理 ---
+      await Notifications.cancelAllScheduledNotificationsAsync();
 
-      for (const reminder of existingReminders) {
-        await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
-      }
-
-      // 5. 設定するスケジュールのリスト
-      const schedules = [
-        {
-          hour: 21,
-          minute: 0,
+      await Notifications.scheduleNotificationAsync({
+        content: {
           title: "今日の記録は済みましたか？",
           body: "21時になりました。今日の活動を記録して、自分を褒めましょう！",
+          sound: 'default',
+          data: { type: 'reminder' },
         },
-      ];
+        trigger: {
+          hour: 21,
+          minute: 0,
+          repeats: true,
+        },
+      });
 
-      // 6. ループで登録
-      for (const s of schedules) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: s.title,
-            body: s.body,
-            sound: 'default',
-            data: { type: 'reminder' }, // 識別用のタグ
-            channelId: 'default', // ★Androidで必須
-          } as any,
-          trigger: {
-            hour: s.hour,
-            minute: s.minute,
-            repeats: true, // 毎日繰り返す
-          },
-        });
-      }
+      // 設定完了を保存
+      await AsyncStorage.setItem(STORAGE_KEY, today);
 
-      // ログ出力は削除
+      console.log("Daily reminder scheduled successfully. (Saved to Storage)");
 
     } catch (error) {
-      // ignore
+      console.log("Error scheduling reminder:", error);
+      // エラーが出た場合はロックを解除して再試行できるようにしても良いが、
+      // 無限ループ防止のため、基本的には解除しなくてOK（次回起動時に再トライ）
+    } finally {
+      // ※ここではあえて isProcessing = false に戻しません。
+      // なぜなら、「1回成功したら、アプリを落とすまで二度と呼ばなくていい」からです。
     }
   };
 
@@ -162,7 +158,6 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     }
   };
 
-  // registerForPushNotificationsAsync をreturnに追加
   return {
     expoPushToken,
     notification,
@@ -172,7 +167,6 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   };
 };
 
-// 独立した関数としてエクスポート（フック内からも呼べるように）
 export async function registerForPushNotificationsAsync() {
   let token;
   if (Platform.OS === 'android') {
@@ -192,25 +186,16 @@ export async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      // 許可されなかった場合は終了
       return;
     }
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
-    // プロジェクトIDが取得できない場合の安全策
-    if (!projectId) {
-      // ignore
-      // return; // 必要に応じてreturnするが、まずは続行させてみる
-    }
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
     try {
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     } catch (e) {
       // ignore
     }
-  } else {
-    // シミュレーターの場合
-    // ignore
   }
   return token;
 }
