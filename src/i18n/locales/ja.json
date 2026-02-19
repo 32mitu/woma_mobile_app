@@ -13,12 +13,24 @@
         "reportTitle": "報告",
         "reportMessage": "運営に報告しました。",
         "blockTitle": "ブロック",
-        "blockMessage": "このユーザーをブロックしました。"
+        "blockMessage": "このユーザーをブロックしました。",
+        "ok": "OK",
+        "close": "閉じる"
     },
     "tab": {
         "home": "ホーム",
         "record": "記録",
         "profile": "マイページ"
+    },
+    "auth": {
+        "login": "ログイン",
+        "logout": "ログアウト",
+        "signup": "新規登録",
+        "email": "メールアドレス",
+        "password": "パスワード",
+        "loginFailed": "ログインに失敗しました",
+        "signupFailed": "登録に失敗しました",
+        "required": "必須項目です"
     },
     "record": {
         "todaysRecord": "今日の記録",
@@ -45,7 +57,10 @@
         "bioPlaceholder": "自己紹介を入力",
         "height": "身長",
         "weight": "体重",
-        "updateSuccess": "プロフィールを更新しました"
+        "updateSuccess": "プロフィールを更新しました",
+        "streak": "{{count}}日継続中",
+        "streak_one": "{{count}}日継続中",
+        "streak_other": "{{count}}日継続中"
     },
     "timeline": {
         "unknownUser": "不明なユーザー",

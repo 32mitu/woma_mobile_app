@@ -13,12 +13,24 @@
         "reportTitle": "Reported",
         "reportMessage": "Thank you for your report.",
         "blockTitle": "Blocked",
-        "blockMessage": "You have blocked this user."
+        "blockMessage": "You have blocked this user.",
+        "ok": "OK",
+        "close": "Close"
     },
     "tab": {
         "home": "Home",
         "record": "Record",
         "profile": "Profile"
+    },
+    "auth": {
+        "login": "Login",
+        "logout": "Logout",
+        "signup": "Sign Up",
+        "email": "Email",
+        "password": "Password",
+        "loginFailed": "Login failed",
+        "signupFailed": "Registration failed",
+        "required": "Required"
     },
     "record": {
         "todaysRecord": "Today's Record",
@@ -45,7 +57,10 @@
         "bioPlaceholder": "Enter your bio",
         "height": "Height",
         "weight": "Weight",
-        "updateSuccess": "Profile updated successfully."
+        "updateSuccess": "Profile updated successfully.",
+        "streak": "{{count}} Day Streak!",
+        "streak_one": "{{count}} Day Streak!",
+        "streak_other": "{{count}} Days Streak!"
     },
     "timeline": {
         "unknownUser": "Unknown User",

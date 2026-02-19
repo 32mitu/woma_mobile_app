@@ -20,8 +20,7 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
         </View>
       );
     }
-    // データが有る場合のみ「これ以上なし」を表示
-    if (posts.length > 0) {
+    if (posts && posts.length > 0) {
       return (
         <View style={styles.footerLoader}>
           <Text style={styles.footerText}>これ以上投稿はありません</Text>
@@ -40,10 +39,7 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
     );
   };
 
-  // useCallback でレンダー関数を固定
   const renderItem = useCallback(({ item }: { item: any }) => {
-    // データ構造の揺らぎを吸収して整形
-    // ※ useTimeline側でこの変換を行うのが理想ですが、現状はここで吸収します
     const targetUserId = item.userId || item.uid || item.authorId || item.senderId || item.user?._id;
 
     // Postコンポーネントに渡すオブジェクトを作成
@@ -54,8 +50,16 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
       imageUrls: item.imageUrls || (item.imageUrl ? [item.imageUrl] : []),
       likes: item.likes || 0,
       comments: item.comments || 0,
-      timestamp: item.createdAt,
+      timestamp: item.createdAt || item.timestamp,
       activities: item.activities || [],
+      reactions: item.reactions || {},
+
+      // ストリークとバッジ情報
+      streak: item.streak,
+      displayBadges: item.displayBadges,
+      earnedBadges: item.earnedBadges,
+
+      // userオブジェクトは存在する場合のみ渡す
       user: item.user ? {
         displayName: item.user.username || item.user.displayName,
         photoURL: item.user.profileImageUrl || item.user.photoURL
@@ -63,11 +67,11 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
     };
 
     return <Post post={postData} />;
-  }, []); // 依存配列は空でOK（itemは引数で来るため）
+  }, []);
 
   const keyExtractor = useCallback((item: any) => item.id, []);
 
-  if (loading && posts.length === 0) {
+  if (loading && !refreshing && (!posts || posts.length === 0)) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#3B82F6" />
@@ -81,18 +85,14 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
         data={posts}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        estimatedItemSize={350} // 平均的な投稿の高さを指定（パフォーマンス向上に重要）
+        estimatedItemSize={400}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         refreshing={refreshing}
         onRefresh={refresh}
-
-        // ヘッダー・フッター・空表示
         ListHeaderComponent={ListHeaderComponent}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
-
-        // スクロールインジケータ調整
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       />
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   center: {
+    flex: 1,
     padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
