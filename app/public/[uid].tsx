@@ -12,6 +12,7 @@ import { useSafety } from '../../src/hooks/useSafety';
 import { Avatar } from '../../src/ui/Avatar';
 import { Button } from '../../src/ui/Button';
 import { IconButton } from '../../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export default function PublicProfileScreen() {
   const { uid } = useLocalSearchParams();
@@ -19,6 +20,7 @@ export default function PublicProfileScreen() {
 
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+  const { t } = useTranslation();
 
   const targetUserId = Array.isArray(uid) ? uid[0] : uid;
   const currentUserId = auth.currentUser?.uid;
@@ -48,7 +50,7 @@ export default function PublicProfileScreen() {
   };
 
   const handleFollowToggle = async () => {
-    if (!currentUserId) return Alert.alert("エラー", "ログインが必要です");
+    if (!currentUserId) return Alert.alert(t('common.error'), t('auth.loginRequired'));
     if (isFollowing) {
       await unfollowUser(targetUserId);
     } else {
@@ -68,23 +70,23 @@ export default function PublicProfileScreen() {
     if (!currentUserId || !targetUserId) return;
 
     Alert.alert(
-      'メニュー',
-      `${profileData?.username || 'このユーザー'}に対する操作`,
+      t('social.menuTitle'),
+      t('social.menuMessage', { name: profileData?.username || t('social.noName') }),
       [
         {
-          text: '通報する',
+          text: t('social.reportUser'),
           style: 'destructive',
-          onPress: () => reportContent(targetUserId, 'user', '不適切なユーザープロフィール')
+          onPress: () => reportContent(targetUserId, 'user', t('social.reportReason'))
         },
         {
-          text: 'ブロックする',
+          text: t('social.blockUser'),
           style: 'destructive',
           onPress: async () => {
             await blockUser(targetUserId);
             router.back();
           }
         },
-        { text: 'キャンセル', style: 'cancel' }
+        { text: t('common.cancel'), style: 'cancel' }
       ]
     );
   };
@@ -97,7 +99,7 @@ export default function PublicProfileScreen() {
 
   if (!profileData) return (
     <View style={styles.center}>
-      <Text>ユーザーが見つかりません</Text>
+      <Text>{t('social.userNotFound')}</Text>
     </View>
   );
 
@@ -131,16 +133,16 @@ export default function PublicProfileScreen() {
         />
 
         <Text style={styles.username}>
-          {profileData.username || profileData.displayName || '名無しさん'}
+          {profileData.username || profileData.displayName || t('social.noName')}
         </Text>
         <Text style={styles.bio}>
-          {profileData.bio || '自己紹介がありません'}
+          {profileData.bio || t('social.noBio')}
         </Text>
 
         {currentUserId !== targetUserId && (
           <View style={styles.actionButtons}>
             <Button
-              title={actionLoading ? '...' : (isFollowing ? 'フォロー中' : 'フォローする')}
+              title={actionLoading ? '...' : (isFollowing ? t('social.following') : t('social.follow'))}
               variant={isFollowing ? 'outline' : 'primary'}
               onPress={handleFollowToggle}
               disabled={actionLoading}
@@ -150,7 +152,7 @@ export default function PublicProfileScreen() {
             {/* 相互フォローの場合のみDMボタンを表示 */}
             {isMutual && (
               <Button
-                title="メッセージ"
+                title={t('social.message')}
                 variant="secondary"
                 icon={<Ionicons name="chatbubble-ellipses" size={18} color="#3B82F6" />}
                 onPress={handleMessagePress}

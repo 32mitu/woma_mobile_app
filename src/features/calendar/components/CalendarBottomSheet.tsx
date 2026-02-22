@@ -4,6 +4,7 @@ import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../../features/auth/useAuth';
 import { ActivityLog } from './ActivityLog';
+import { useTranslation } from 'react-i18next';
 // 共通コンポーネント
 import { IconButton } from '../../../ui/IconButton';
 
@@ -15,6 +16,7 @@ type Props = {
 
 const CalendarBottomSheetComponent = ({ isVisible, onClose, selectedDate }: Props) => {
   const { userProfile } = useAuth();
+  const { t, i18n } = useTranslation();
 
   // クエリのメモ化 (これが無いとレンダリング毎にActivityLogが再マウントされてしまいます)
   const dailyQuery = useMemo(() => {
@@ -50,7 +52,10 @@ const CalendarBottomSheetComponent = ({ isVisible, onClose, selectedDate }: Prop
             <View style={styles.sheetContainer}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>
-                  {selectedDate.replace('-', '年').replace('-', '月') + '日'} の記録
+                  {i18n.language === 'ja'
+                    ? selectedDate.replace('-', '年').replace('-', '月') + '日の記録'
+                    : t('calendar.recordsForDate', { date: new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })
+                  }
                 </Text>
                 {/* 共通の閉じるボタン */}
                 <IconButton

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../../ui/Card'; // 共通コンポーネント
 import { Badge } from '../../../ui/Badge'; // 共通コンポーネント
 import { Challenge } from '../../../types';
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
+    const { t } = useTranslation();
     // 進捗率の計算 (0〜100%)
     const progressRate = Math.min(Math.max(currentValue / challenge.target, 0), 1);
     const percent = Math.floor(progressRate * 100);
@@ -18,10 +20,10 @@ export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
     // タイプごとの単位とアイコン設定
     const getMeta = () => {
         switch (challenge.type) {
-            case 'steps': return { unit: '歩', icon: '👟', label: 'チーム歩数' };
-            case 'calories': return { unit: 'kcal', icon: '🔥', label: '消費カロリー' };
-            case 'distance': return { unit: 'km', icon: '📍', label: '移動距離' };
-            default: return { unit: '', icon: '🎯', label: 'チャレンジ' };
+            case 'steps': return { unit: t('group.challenge.steps'), icon: '👟', label: t('group.challenge.progressLabel', { label: t('group.challenge.steps') }) };
+            case 'calories': return { unit: 'kcal', icon: '🔥', label: t('group.challenge.progressLabel', { label: t('group.challenge.calories') }) };
+            case 'distance': return { unit: 'km', icon: '📍', label: t('group.challenge.progressLabel', { label: t('group.challenge.distance') }) };
+            default: return { unit: '', icon: '🎯', label: t('group.challenge.progressLabel', { label: t('group.challenge.progressLabel', { label: '' }) }) };
         }
     };
     const { unit, icon, label } = getMeta();
@@ -35,7 +37,7 @@ export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
                     <Text style={styles.title}>{label}</Text>
                 </View>
                 <Badge
-                    label={percent >= 100 ? "達成！🎉" : `あと ${remaining.toLocaleString()} ${unit}`}
+                    label={percent >= 100 ? t('group.challenge.achieved') : t('group.challenge.remaining', { remaining: remaining.toLocaleString(), unit })}
                     color={percent >= 100 ? "success" : "primary"}
                     variant="default"
                     size="sm"
@@ -69,7 +71,10 @@ export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
 
             {/* 期間表示 */}
             <Text style={styles.dateInfo}>
-                期間: {challenge.startDate.toDate().toLocaleDateString()} 〜 {challenge.endDate.toDate().toLocaleDateString()}
+                {t('group.challenge.period', {
+                    start: challenge.startDate.toDate().toLocaleDateString(),
+                    end: challenge.endDate.toDate().toLocaleDateString()
+                })}
             </Text>
         </Card>
     );

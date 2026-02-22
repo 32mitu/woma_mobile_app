@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../../ui/Card';
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export const WeightChart = ({ records }: Props) => {
+  const { t } = useTranslation();
   const chartData = records
     .filter(r => r.weight && Number(r.weight) > 0)
     .sort((a, b) => a.createdAt - b.createdAt)
@@ -23,10 +25,10 @@ export const WeightChart = ({ records }: Props) => {
   if (chartData.length === 0) {
     return (
       <Card style={styles.container}>
-        <Text style={styles.title}>体重の推移</Text>
+        <Text style={styles.title}>{t('chart.weightTitle')}</Text>
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>データがありません</Text>
-          <Text style={styles.emptySubText}>記録時に体重を入力するとグラフになります</Text>
+          <Text style={styles.emptyText}>{t('common.noData')}</Text>
+          <Text style={styles.emptySubText}>{t('chart.noDataHint')}</Text>
         </View>
       </Card>
     );
@@ -35,14 +37,14 @@ export const WeightChart = ({ records }: Props) => {
   let finalData = chartData;
   if (chartData.length === 1) {
     finalData = [
-      { value: chartData[0].value, label: '' },
+      { value: chartData[0].value, label: '', dataPointText: '' },
       chartData[0]
     ];
   }
 
   return (
     <Card style={styles.container}>
-      <Text style={styles.title}>体重の推移 (kg)</Text>
+      <Text style={styles.title}>{t('chart.weightAxisTitle')}</Text>
       <View style={styles.chartWrapper}>
         <LineChart
           data={finalData}

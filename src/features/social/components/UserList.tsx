@@ -1,5 +1,6 @@
 import React from 'react';
 import { FlatList, View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { UserCard } from './UserCard'; // Named Importに変更
 
 type Props = {
@@ -7,10 +8,11 @@ type Props = {
 };
 
 export const UserList = ({ users }: Props) => {
+  const { t } = useTranslation();
   if (!users || users.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>ユーザーが見つかりません</Text>
+        <Text style={styles.emptyText}>{t('social.noUsers')}</Text>
       </View>
     );
   }

@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 // Hooks
 import { useAuth } from '../../src/features/auth/useAuth';
+import { useTranslation } from 'react-i18next';
 // PFC機能一時停止: エラー回避のためコメントアウト
 // import { useDailyNutrition } from '../../src/features/record/components/Meal/useDailyNutrition';
 
@@ -20,6 +21,7 @@ import { ActivityLog } from '../../src/features/calendar/components/ActivityLog'
 export default function ProfileScreen() {
   const router = useRouter();
   const { userProfile, signOut, deleteAccount } = useAuth();
+  const { t } = useTranslation();
 
   // PFCデータの取得フック (一時停止)
   // const { nutrition, loading: nutritionLoading, refetch: refetchNutrition } = useDailyNutrition();
@@ -41,10 +43,10 @@ export default function ProfileScreen() {
 
   // ログアウト処理
   const handleLogout = async () => {
-    Alert.alert("ログアウト", "本当にログアウトしますか？", [
-      { text: "キャンセル", style: "cancel" },
+    Alert.alert(t('auth.logoutConfirmTitle'), t('auth.logoutConfirmMessage'), [
+      { text: t('common.cancel'), style: "cancel" },
       {
-        text: "ログアウト",
+        text: t('auth.logoutConfirm'),
         style: "destructive",
         onPress: async () => {
           await signOut();
@@ -57,12 +59,12 @@ export default function ProfileScreen() {
   // アカウント削除処理
   const handleDeleteAccount = () => {
     Alert.alert(
-      "アカウント削除 (退会)",
-      "この操作は取り消せません。\n全てのデータ（記録、投稿、設定）が永久に削除されます。\n本当に実行しますか？",
+      t('auth.deleteAccount'),
+      t('auth.deleteAccountMessage'),
       [
-        { text: "キャンセル", style: "cancel" },
+        { text: t('common.cancel'), style: "cancel" },
         {
-          text: "削除する",
+          text: t('auth.deleteAccountConfirm'),
           style: "destructive",
           onPress: () => performDelete()
         }
@@ -74,12 +76,12 @@ export default function ProfileScreen() {
     setIsDeleting(true);
     try {
       await deleteAccount();
-      Alert.alert("削除完了", "アカウントを削除しました。", [
-        { text: "OK", onPress: () => router.replace('/') }
+      Alert.alert(t('auth.deleteAccountSuccess'), t('auth.deleteAccountSuccessMessage'), [
+        { text: t('common.ok'), onPress: () => router.replace('/') }
       ]);
     } catch (error: any) {
       console.error(error);
-      Alert.alert("エラー", error.message || "削除に失敗しました。再ログインしてから試してください。");
+      Alert.alert(t('common.error'), error.message || t('auth.deleteAccountFailed'));
       setIsDeleting(false);
     }
   };
@@ -122,7 +124,7 @@ export default function ProfileScreen() {
           ) : (
             <View style={styles.noticeContainer}>
               <Text style={styles.noticeText}>
-                プロフィール設定で「体重」を入力すると、{"\n"}詳細な分析グラフが表示されます。
+                {t('profile.inputWeightHint')}
               </Text>
             </View>
           )}
@@ -140,7 +142,7 @@ export default function ProfileScreen() {
 
         {/* 6. アカウント削除エリア (Danger Zone) */}
         <View style={styles.dangerZone}>
-          <Text style={styles.dangerTitle}>アカウント管理</Text>
+          <Text style={styles.dangerTitle}>{t('profile.accountManagement')}</Text>
           <TouchableOpacity
             style={[styles.deleteButton, isDeleting && styles.disabledButton]}
             onPress={handleDeleteAccount}
@@ -149,12 +151,12 @@ export default function ProfileScreen() {
             {isDeleting ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <ActivityIndicator color="#EF4444" size="small" />
-                <Text style={styles.deleteText}>処理中...</Text>
+                <Text style={styles.deleteText}>{t('common.processing')}</Text>
               </View>
             ) : (
               <>
                 <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                <Text style={styles.deleteText}>アカウントを削除する (退会)</Text>
+                <Text style={styles.deleteText}>{t('profile.deleteAccount')}</Text>
               </>
             )}
           </TouchableOpacity>

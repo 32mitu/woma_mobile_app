@@ -14,6 +14,7 @@ import { useSafety } from '../../src/hooks/useSafety';
 
 // 共通コンポーネント
 import { IconButton } from '../../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export default function ChatRoomScreen() {
   const { id } = useLocalSearchParams();
@@ -25,8 +26,9 @@ export default function ChatRoomScreen() {
 
   const { messages, onSend, sendImage, markAsRead } = useChat(userProfile?.uid, partnerId);
   const { reportContent, blockUser } = useSafety();
+  const { t } = useTranslation();
 
-  const [partnerName, setPartnerName] = useState('チャット');
+  const [partnerName, setPartnerName] = useState(t('dm.chat'));
 
   useEffect(() => {
     if (partnerId) {
@@ -36,7 +38,7 @@ export default function ChatRoomScreen() {
           const snap = await getDoc(docRef);
           if (snap.exists()) {
             const data = snap.data();
-            setPartnerName(data.username || data.displayName || 'チャット');
+            setPartnerName(data.username || data.displayName || t('dm.chat'));
           }
         } catch (e) {
           console.error(e);
@@ -65,19 +67,19 @@ export default function ChatRoomScreen() {
 
   const showActionSheet = () => {
     Alert.alert(
-      'メニュー',
-      '操作を選択してください',
+      t('common.menu'),
+      '',
       [
-        { text: 'このユーザーを通報', onPress: handleReport, style: 'destructive' },
-        { text: 'このユーザーをブロック', onPress: handleBlock, style: 'destructive' },
-        { text: 'キャンセル', style: 'cancel' }
+        { text: t('common.report'), onPress: handleReport, style: 'destructive' },
+        { text: t('common.block'), onPress: handleBlock, style: 'destructive' },
+        { text: t('common.cancel'), style: 'cancel' }
       ]
     );
   };
 
   const handleReport = async () => {
     if (!partnerId) return;
-    await reportContent(partnerId, 'user', '不適切なDM');
+    await reportContent(partnerId, 'user', t('dm.reportReason'));
   };
 
   const handleBlock = async () => {
@@ -90,7 +92,7 @@ export default function ChatRoomScreen() {
     if (!userProfile) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('エラー', '写真へのアクセス許可が必要です');
+      Alert.alert(t('common.error'), t('common.cameraRollPermission'));
       return;
     }
 
@@ -111,23 +113,23 @@ export default function ChatRoomScreen() {
 
       const count = result.assets.length;
       const confirmMessage = count === 1
-        ? "この画像を送信しますか？"
-        : `${count}枚の画像を送信しますか？`;
+        ? t('dm.sendImageConfirm')
+        : t('dm.sendImagesConfirm', { count });
 
       Alert.alert(
-        "画像の送信",
+        t('dm.sendImageTitle'),
         confirmMessage,
         [
-          { text: "キャンセル", style: "cancel" },
+          { text: t('common.cancel'), style: "cancel" },
           {
-            text: "送信",
+            text: t('common.ok'),
             onPress: async () => {
               try {
                 const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
                 await Promise.all(sendPromises);
               } catch (e) {
                 console.error(e);
-                Alert.alert("エラー", "画像の送信に失敗しました");
+                Alert.alert(t('common.error'), t('dm.sendImageFailed'));
               }
             }
           }
@@ -152,7 +154,7 @@ export default function ChatRoomScreen() {
 
   const currentUser = {
     _id: userProfile?.uid || '',
-    name: userProfile?.username || '自分',
+    name: userProfile?.username || t('dm.noName'),
     avatar: userProfile?.profileImageUrl || undefined,
   };
 
@@ -170,7 +172,7 @@ export default function ChatRoomScreen() {
           renderUsernameOnMessage={false}
           alwaysShowSend
           renderActions={renderActions}
-          placeholder="メッセージを入力..."
+          placeholder={t('dm.placeholder')}
           textInputProps={{ style: styles.textInput }}
           isKeyboardInternallyHandled={false}
           keyboardShouldPersistTaps="never"

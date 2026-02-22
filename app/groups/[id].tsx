@@ -17,6 +17,7 @@ import { IconButton } from '../../src/ui/IconButton';
 import { Card } from '../../src/ui/Card';
 import { ChallengeProgress } from '../../src/features/groups/components/ChallengeProgress';
 import { User } from '../../src/types';
+import { useTranslation } from 'react-i18next';
 
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -26,6 +27,7 @@ export default function GroupDetailScreen() {
   const groupId = Array.isArray(id) ? id[0] : id;
 
   const { group, isMember, loading, toggleJoin, deleteGroup } = useGroupDetail(groupId, userProfile?.uid) as any;
+  const { t } = useTranslation();
 
   // オーナー判定
   const currentUserId = userProfile?.uid || auth.currentUser?.uid;
@@ -100,7 +102,7 @@ export default function GroupDetailScreen() {
   if (!group) {
     return (
       <View style={styles.center}>
-        <Text>グループが見つかりません</Text>
+        <Text>{t('group.notFound')}</Text>
       </View>
     );
   }
@@ -114,7 +116,7 @@ export default function GroupDetailScreen() {
 
       <View style={styles.infoSection}>
         <Text style={styles.groupName}>{group.name}</Text>
-        <Text style={styles.memberCount}>{group.memberIds?.length || 0}人のメンバー</Text>
+        <Text style={styles.memberCount}>{t('group.memberCount', { count: group.memberIds?.length || 0 })}</Text>
         <Text style={styles.description}>{group.description}</Text>
 
         {hasActiveChallenge && (
@@ -136,16 +138,16 @@ export default function GroupDetailScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                 <Text style={{ fontSize: 20, marginRight: 8 }}>🎯</Text>
                 <Text style={styles.createChallengeTitle}>
-                  チームチャレンジ設定
+                  {t('group.challengeTitle')}
                 </Text>
               </View>
               <Text style={styles.createChallengeDesc}>
                 {hasActiveChallenge
-                  ? "目標や期間を変更、または新しく作り直します。"
-                  : "メンバーと協力して目標を達成しましょう！"}
+                  ? t('group.challengeDescActive')
+                  : t('group.challengeDescNew')}
               </Text>
               <Button
-                title={hasActiveChallenge ? "設定を変更する" : "チャレンジを作成する"}
+                title={hasActiveChallenge ? t('group.challengeEdit') : t('group.challengeCreate')}
                 variant={hasActiveChallenge ? "outline" : "primary"}
                 onPress={() => {
                   router.push({
@@ -160,29 +162,29 @@ export default function GroupDetailScreen() {
 
         {isOwner ? (
           <Button
-            title="グループを削除する"
+            title={t('group.deleteButton')}
             variant="outline"
             onPress={() => {
               Alert.alert(
-                "グループの削除",
-                "本当に削除しますか？\nこの操作は取り消せません。\nメンバー全員の記録は残りますが、グループへの紐付けは解除されます。",
+                t('group.deleteTitle'),
+                t('group.deleteMessage'),
                 [
-                  { text: "キャンセル", style: "cancel" },
+                  { text: t('common.cancel'), style: "cancel" },
                   {
-                    text: "削除する",
+                    text: t('group.deleteConfirm'),
                     style: "destructive",
                     onPress: async () => {
                       if (deleteGroup) {
                         try {
                           await deleteGroup();
-                          Alert.alert("削除しました", "グループを削除しました。", [
-                            { text: "OK", onPress: () => router.replace('/(tabs)/profile') }
+                          Alert.alert(t('group.deleteSuccess'), t('group.deleteSuccessMessage'), [
+                            { text: t('common.ok'), onPress: () => router.replace('/(tabs)/profile') }
                           ]);
                         } catch (e) {
-                          Alert.alert("エラー", "削除に失敗しました。");
+                          Alert.alert(t('common.error'), t('group.deleteFailed'));
                         }
                       } else {
-                        Alert.alert("エラー", "削除機能が実装されていません。");
+                        Alert.alert(t('common.error'), t('group.deleteNotImplemented'));
                       }
                     }
                   }
@@ -194,13 +196,13 @@ export default function GroupDetailScreen() {
           />
         ) : (
           <Button
-            title={isMember ? "脱退する" : "参加する"}
+            title={isMember ? t('group.leave') : t('group.join')}
             variant={isMember ? "outline" : "primary"}
             onPress={() => {
               if (isMember) {
-                Alert.alert("確認", "グループを脱退しますか？", [
-                  { text: "キャンセル", style: "cancel" },
-                  { text: "脱退する", style: "destructive", onPress: toggleJoin }
+                Alert.alert(t('group.leaveConfirmTitle'), t('group.leaveConfirmMessage'), [
+                  { text: t('common.cancel'), style: "cancel" },
+                  { text: t('group.leaveConfirm'), style: "destructive", onPress: toggleJoin }
                 ]);
               } else {
                 toggleJoin();
@@ -213,7 +215,7 @@ export default function GroupDetailScreen() {
       </View>
 
       <View style={styles.timelineSection}>
-        <Text style={styles.sectionTitle}>タイムライン</Text>
+        <Text style={styles.sectionTitle}>{t('group.timeline')}</Text>
       </View>
     </View>
   );

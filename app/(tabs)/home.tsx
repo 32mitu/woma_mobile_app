@@ -9,6 +9,7 @@ import { useAuth } from '../../src/features/auth/useAuth';
 import { usePushNotifications } from '../../src/hooks/usePushNotifications';
 import { useHealthKit } from '../../src/hooks/useHealthKit';
 import { useUnreadCount } from '../../src/features/dm/hooks/useUnreadCount';
+import { useTranslation } from 'react-i18next';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function HomeScreen() {
   // requestAccess をここで受け取る
   const { dailySteps, isAvailable, requestAccess } = useHealthKit();
   const unreadCount = useUnreadCount();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (userProfile?.uid) {
@@ -61,19 +63,19 @@ export default function HomeScreen() {
               <Ionicons name="footsteps" size={20} color="#3B82F6" />
             </View>
             <View>
-              <Text style={styles.stepLabel}>今日の歩数</Text>
-              <Text style={styles.stepCount}>{dailySteps.toLocaleString()} 歩</Text>
+              <Text style={styles.stepLabel}>{t('home.todaySteps')}</Text>
+              <Text style={styles.stepCount}>{dailySteps.toLocaleString()}{t('home.stepsUnit')}</Text>
             </View>
           </View>
 
           <TouchableOpacity
             style={styles.recordButton}
             onPress={() => {
-              Alert.alert("えらい！", "その調子で記録して、みんなに自慢しましょう！");
+              Alert.alert(t('home.alertTitle'), t('home.alertMessage'));
               router.push('/(tabs)/record');
             }}
           >
-            <Text style={styles.recordButtonText}>記録して肯定される</Text>
+            <Text style={styles.recordButtonText}>{t('home.record')}</Text>
             <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
           </TouchableOpacity>
         </View>
@@ -85,16 +87,16 @@ export default function HomeScreen() {
               <Ionicons name="fitness" size={20} color="#6B7280" />
             </View>
             <View>
-              <Text style={styles.stepLabel}>ヘルスケア未連携</Text>
-              <Text style={[styles.stepCount, { fontSize: 14 }]}>歩数を自動記録する</Text>
+              <Text style={styles.stepLabel}>{t('home.healthNotLinked')}</Text>
+              <Text style={[styles.stepCount, { fontSize: 14 }]}>{t('home.healthLinkDesc')}</Text>
             </View>
           </View>
 
           <TouchableOpacity
             style={[styles.recordButton, { backgroundColor: '#3B82F6' }]}
-            onPress={requestAccess} // ★ここでボタンを押すと権限画面が出る
+            onPress={requestAccess}
           >
-            <Text style={[styles.recordButtonText, { color: 'white' }]}>連携する</Text>
+            <Text style={[styles.recordButtonText, { color: 'white' }]}>{t('home.linkHealth')}</Text>
             <Ionicons name="arrow-forward" size={16} color="white" />
           </TouchableOpacity>
         </View>

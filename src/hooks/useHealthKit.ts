@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Platform, AppState, AppStateStatus, Alert, Linking } from 'react-native';
+import i18n from '../i18n';
 // iOS用
 import AppleHealthKit, { HealthValue, HealthKitPermissions } from 'react-native-health';
 // Android用
@@ -103,16 +104,16 @@ export const useHealthKit = () => {
       console.log('[HealthKit] Android SDK Status:', status);
 
       if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE) {
-        Alert.alert("非対応", "このAndroidバージョンはヘルスコネクトに対応していません。");
+        Alert.alert(i18n.t('healthkit.notSupported'), i18n.t('healthkit.notSupportedMessage'));
         return false;
       }
       if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
         Alert.alert(
-          "更新が必要",
-          "ヘルスコネクトアプリのインストールまたは更新が必要です。",
+          i18n.t('healthkit.updateRequired'),
+          i18n.t('healthkit.updateRequiredMessage'),
           [
-            { text: "ストアを開く", onPress: () => Linking.openURL('market://details?id=com.google.android.apps.healthdata') },
-            { text: "キャンセル" }
+            { text: i18n.t('healthkit.openStore'), onPress: () => Linking.openURL('market://details?id=com.google.android.apps.healthdata') },
+            { text: i18n.t('common.cancel') }
           ]
         );
         return false;
@@ -142,7 +143,7 @@ export const useHealthKit = () => {
       const canProceed = await checkAndroidInitialization();
       if (!canProceed) {
         console.log('[HealthKit] Initialization failed. Aborting request.');
-        Alert.alert("エラー", "ヘルスコネクトの初期化に失敗しました。");
+        Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.initFailed'));
         return;
       }
 
@@ -165,14 +166,14 @@ export const useHealthKit = () => {
         setIsAvailable(true);
         // 権限取得直後にデータを取得
         await fetchSteps();
-        Alert.alert("連携完了", "歩数データの連携に成功しました！");
+        Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
       } else {
         console.log('[HealthKit] Permission denied or cancelled.');
-        Alert.alert("許可が必要です", "歩数を取得するには権限を許可してください。");
+        Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
       }
     } catch (e) {
       console.error("[HealthKit] Request Access Error:", e);
-      Alert.alert("エラー", "ヘルスコネクトの起動中にエラーが発生しました。");
+      Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.errorMessage'));
     } finally {
       setRequesting(false);
     }

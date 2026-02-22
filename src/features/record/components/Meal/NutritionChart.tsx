@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
+import { useTranslation } from 'react-i18next';
 // 修正: srcフォルダまで戻るため ../ を4つにする
 import { Card } from '../../../../ui/Card';
 // 修正: 同じフォルダにあるため ./ に変更
@@ -11,6 +12,7 @@ interface NutritionChartProps {
 }
 
 export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
+    const { t } = useTranslation();
     const { protein, fat, carbs } = data;
 
     // カロリー換算 (P:4kcal, F:9kcal, C:4kcal)
@@ -39,7 +41,7 @@ export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
 
     return (
         <Card style={styles.container}>
-            <Text style={styles.title}>今日のPFCバランス</Text>
+            <Text style={styles.title}>{t('chart.pfcTitle')}</Text>
 
             <View style={styles.chartRow}>
                 {/* ドーナツグラフ */}
@@ -55,7 +57,7 @@ export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
                         fontWeight="bold"
                         centerLabelComponent={() => (
                             <View style={{ alignItems: 'center' }}>
-                                <Text style={styles.totalLabel}>摂取</Text>
+                                <Text style={styles.totalLabel}>{t('chart.intake')}</Text>
                                 <Text style={styles.totalValue}>{data.calories}</Text>
                                 <Text style={styles.totalUnit}>kcal</Text>
                             </View>
@@ -65,9 +67,9 @@ export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
 
                 {/* 凡例と詳細数値 */}
                 <View style={styles.legendContainer}>
-                    <LegendItem color="#FF6B6B" label="タンパク質 (P)" value={`${protein}g`} sub={`目標: 13-20%`} />
-                    <LegendItem color="#4ECDC4" label="脂質 (F)" value={`${fat}g`} sub={`目標: 20-30%`} />
-                    <LegendItem color="#FFE66D" label="炭水化物 (C)" value={`${carbs}g`} sub={`目標: 50-65%`} />
+                    <LegendItem color="#FF6B6B" label={t('chart.protein')} value={`${protein}g`} sub={t('chart.proteinGoal')} />
+                    <LegendItem color="#4ECDC4" label={t('chart.fat')} value={`${fat}g`} sub={t('chart.fatGoal')} />
+                    <LegendItem color="#FFE66D" label={t('chart.carbs')} value={`${carbs}g`} sub={t('chart.carbsGoal')} />
                 </View>
             </View>
 
@@ -75,9 +77,9 @@ export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
             {!isEmpty && (
                 <View style={styles.adviceBox}>
                     <Text style={styles.adviceText}>
-                        {fPercent > 30 ? "⚠️ 脂質が多めです。揚げ物を控えましょう。" :
-                            pPercent < 13 ? "💡 タンパク質が不足気味。お肉や魚を追加！" :
-                                "✨ 良いバランスです！"}
+                        {fPercent > 30 ? t('chart.adviceHighFat') :
+                            pPercent < 13 ? t('chart.adviceLowProtein') :
+                                t('chart.adviceGood')}
                     </Text>
                 </View>
             )}

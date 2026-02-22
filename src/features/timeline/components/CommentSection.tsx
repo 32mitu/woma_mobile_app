@@ -4,6 +4,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, update
 import { db, auth } from '../../../../firebaseConfig';
 import { timeAgo } from '../utils/timelineUtils';
 import { usePushNotifications } from '../../../hooks/usePushNotifications';
+import { useTranslation } from 'react-i18next';
 
 // 共通コンポーネント
 import { Input } from '../../../ui/Input';
@@ -17,6 +18,7 @@ type CommentSectionProps = {
 };
 
 export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: CommentSectionProps) => {
+  const { t } = useTranslation();
   const { sendPushNotification } = usePushNotifications();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
       // 1. コメントをサブコレクションに追加
       await addDoc(collection(db, "timeline", postId, "comments"), {
         userId: user?.uid,
-        username: user?.displayName || "名無し",
+        username: user?.displayName || t('timeline.noName'),
         userPhoto: user?.photoURL || null, // アイコン表示用に保存
         text: inputText.trim(),
         createdAt: serverTimestamp(),
@@ -64,8 +66,8 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
           if (authorData.pushToken) {
             await sendPushNotification(
               authorData.pushToken,
-              "新しいコメント",
-              `${user?.displayName || "誰か"}があなたの投稿にコメントしました: ${inputText.trim()}`
+              t('notification.commentTitle'),
+              t('notification.commentBody', { user: user?.displayName || t('notification.someone'), text: inputText.trim() })
             );
           }
         }
@@ -75,7 +77,7 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
       onCommentAdded?.();
     } catch (error) {
       console.error("Error adding comment: ", error);
-      Alert.alert("エラー", "コメントの送信に失敗しました。");
+      Alert.alert(t('common.error'), t('comment.errorSend'));
     } finally {
       setSubmitting(false);
     }
@@ -93,7 +95,7 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
             <View style={styles.commentContent}>
               <View style={styles.commentHeader}>
                 <Text style={styles.username}>{item.username}</Text>
-                <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : '今'}</Text>
+                <Text style={styles.date}> • {item.createdAt ? timeAgo(item.createdAt) : t('comment.now')}</Text>
               </View>
               <Text style={styles.commentText}>{item.text}</Text>
             </View>
@@ -104,7 +106,7 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
       {/* 共通Inputコンポーネントを使用 */}
       <View style={styles.inputWrapper}>
         <Input
-          placeholder="コメントを入力..."
+          placeholder={t('comment.placeholder')}
           value={inputText}
           onChangeText={setInputText}
           multiline

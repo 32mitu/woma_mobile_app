@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { useGroupTimeline } from '../hooks/useGroupTimeline';
+import { useTranslation } from 'react-i18next';
 import { Post } from '../../timeline/components/Post';
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
 
 export const GroupTimeline = ({ memberIds, ListHeaderComponent }: Props) => {
     const { posts, loading, refreshing, refresh, loadMore } = useGroupTimeline(memberIds);
+    const { t } = useTranslation();
 
     const renderItem = useCallback(({ item }: { item: any }) => {
         // データの揺らぎを吸収
@@ -55,7 +57,7 @@ export const GroupTimeline = ({ memberIds, ListHeaderComponent }: Props) => {
             ListEmptyComponent={
                 !loading ? (
                     <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>まだメンバーの記録がありません</Text>
+                        <Text style={styles.emptyText}>{t('group.noMemberPosts')}</Text>
                     </View>
                 ) : null
             }

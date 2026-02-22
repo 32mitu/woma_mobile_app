@@ -14,11 +14,13 @@ import { groupCreateSchema, GroupCreateFormData } from '../../src/utils/validati
 import { Button } from '../../src/ui/Button';
 import { Input } from '../../src/ui/Input';
 import { IconButton } from '../../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export default function CreateGroupScreen() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const { createGroup } = useGroups();
+  const { t } = useTranslation();
 
   // フォーム設定
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<GroupCreateFormData>({
@@ -32,21 +34,19 @@ export default function CreateGroupScreen() {
   // 送信処理
   const onSubmit = async (data: GroupCreateFormData) => {
     if (!userProfile) {
-      Alert.alert('エラー', 'ログインが必要です');
+      Alert.alert(t('common.error'), t('group.loginRequired'));
       return;
     }
 
     try {
-      // useGroupsフックのcreateGroupを呼び出す
-      // ※スキーマ定義の description と、createGroupの引数(desc)を合わせる
       await createGroup(data.name, data.description || '', userProfile.uid);
 
-      Alert.alert('完了', 'グループを作成しました！', [
-        { text: 'OK', onPress: () => router.back() }
+      Alert.alert(t('group.createSuccess'), t('group.createSuccessMessage'), [
+        { text: t('common.ok'), onPress: () => router.back() }
       ]);
     } catch (e) {
       console.error(e);
-      Alert.alert('エラー', '作成に失敗しました');
+      Alert.alert(t('common.error'), t('group.createFailed'));
     }
   };
 
@@ -66,7 +66,7 @@ export default function CreateGroupScreen() {
               color="#333"
               onPress={() => router.back()}
             />
-            <Text style={styles.title}>グループ作成</Text>
+            <Text style={styles.title}>{t('group.createTitle')}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -76,8 +76,8 @@ export default function CreateGroupScreen() {
               name="name"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="グループ名"
-                  placeholder="例: 早起きチャレンジ部"
+                  label={t('group.nameLabel')}
+                  placeholder={t('group.namePlaceholder')}
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
@@ -92,8 +92,8 @@ export default function CreateGroupScreen() {
               name="description"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="説明"
-                  placeholder="活動内容や目標などを記入"
+                  label={t('group.descLabel')}
+                  placeholder={t('group.descPlaceholder')}
                   multiline
                   numberOfLines={3}
                   value={value}
@@ -106,7 +106,7 @@ export default function CreateGroupScreen() {
             />
 
             <Button
-              title="作成する"
+              title={t('group.createButton')}
               onPress={handleSubmit(onSubmit)}
               loading={isSubmitting}
               variant="primary"

@@ -5,9 +5,11 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
 import { CalendarBottomSheet } from './CalendarBottomSheet';
+import { useTranslation } from 'react-i18next';
 // 共通コンポーネント
 import { Card } from '../../../ui/Card';
 
+// 日本語ロケール登録
 LocaleConfig.locales['jp'] = {
   monthNames: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
   monthNamesShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
@@ -15,14 +17,25 @@ LocaleConfig.locales['jp'] = {
   dayNamesShort: ['日', '月', '火', '水', '木', '金', '土'],
   today: '今日'
 };
-LocaleConfig.defaultLocale = 'jp';
+// 英語ロケール登録（react-native-calendarsのデフォルト）
+LocaleConfig.locales['en'] = {
+  monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  today: 'Today'
+};
 
 const CalendarViewComponent = () => {
   const { userProfile } = useAuth();
+  const { t, i18n } = useTranslation();
   const [markedDates, setMarkedDates] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState('');
   const [isModalVisible, setModalVisible] = useState(false);
+
+  // 言語に応じてカレンダーロケールを切り替え
+  LocaleConfig.defaultLocale = i18n.language === 'ja' ? 'jp' : 'en';
 
   useEffect(() => {
     if (!userProfile?.uid) return;
@@ -85,7 +98,7 @@ const CalendarViewComponent = () => {
 
       <View style={styles.legend}>
         <View style={styles.dot} />
-        <Text style={styles.legendText}>記録がある日</Text>
+        <Text style={styles.legendText}>{t('calendar.legend')}</Text>
       </View>
 
       <CalendarBottomSheet

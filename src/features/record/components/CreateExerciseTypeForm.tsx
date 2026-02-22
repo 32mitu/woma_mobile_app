@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 // 修正: パスを components/ui から ui に変更
 import { Input } from '../../../ui/Input';
 import { Button } from '../../../ui/Button';
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) => {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [low, setLow] = useState('3.0');
   const [mid, setMid] = useState('5.0');
@@ -20,7 +22,7 @@ export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) =
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      alert('運動名を入力してください');
+      Alert.alert(t('common.error'), t('exercise.nameRequired'));
       return;
     }
     setLoading(true);
@@ -48,41 +50,41 @@ export const CreateExerciseTypeForm = ({ visible, onSubmit, onCancel }: Props) =
           style={{ flex: 1 }}
         >
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <Text style={styles.title}>新しい運動を作成</Text>
+            <Text style={styles.title}>{t('exercise.createTitle')}</Text>
 
             <Input
-              label="運動名"
-              placeholder="例: ヨガ, ボルダリング"
+              label={t('exercise.nameLabel')}
+              placeholder={t('exercise.namePlaceholder')}
               value={name}
               onChangeText={setName}
               autoFocus
               containerStyle={{ marginBottom: 20 }}
             />
 
-            <Text style={styles.sectionLabel}>強度別METs値</Text>
+            <Text style={styles.sectionLabel}>{t('exercise.metsLabel')}</Text>
             <View style={styles.metsRow}>
               <View style={styles.metsCol}>
-                <Input label="弱め" value={low} onChangeText={setLow} keyboardType="numeric" placeholder="3.0" />
+                <Input label={t('exercise.metsLow')} value={low} onChangeText={setLow} keyboardType="numeric" placeholder="3.0" />
               </View>
               <View style={styles.metsCol}>
-                <Input label="普通" value={mid} onChangeText={setMid} keyboardType="numeric" placeholder="5.0" />
+                <Input label={t('exercise.metsMid')} value={mid} onChangeText={setMid} keyboardType="numeric" placeholder="5.0" />
               </View>
               <View style={styles.metsCol}>
-                <Input label="強め" value={high} onChangeText={setHigh} keyboardType="numeric" placeholder="7.0" />
+                <Input label={t('exercise.metsHigh')} value={high} onChangeText={setHigh} keyboardType="numeric" placeholder="7.0" />
               </View>
             </View>
 
             <View style={styles.referenceBox}>
-              <Text style={styles.refTitle}>💡 METsの目安</Text>
-              <View style={styles.refRow}><Text style={styles.refText}>散歩・ストレッチ</Text><Text style={styles.refVal}>2.5 〜 3.0</Text></View>
-              <View style={styles.refRow}><Text style={styles.refText}>早歩き・自転車</Text><Text style={styles.refVal}>4.0 〜 5.0</Text></View>
-              <View style={styles.refRow}><Text style={styles.refText}>ジョギング・筋トレ</Text><Text style={styles.refVal}>6.0 〜 7.0</Text></View>
-              <View style={styles.refRow}><Text style={styles.refText}>ランニング・水泳</Text><Text style={styles.refVal}>8.0 〜 10.0</Text></View>
+              <Text style={styles.refTitle}>{t('exercise.metsReference')}</Text>
+              <View style={styles.refRow}><Text style={styles.refText}>{t('exercise.ref1Label')}</Text><Text style={styles.refVal}>{t('exercise.ref1Value')}</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>{t('exercise.ref2Label')}</Text><Text style={styles.refVal}>{t('exercise.ref2Value')}</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>{t('exercise.ref3Label')}</Text><Text style={styles.refVal}>{t('exercise.ref3Value')}</Text></View>
+              <View style={styles.refRow}><Text style={styles.refText}>{t('exercise.ref4Label')}</Text><Text style={styles.refVal}>{t('exercise.ref4Value')}</Text></View>
             </View>
 
             <View style={styles.buttonGroup}>
-              <Button title="キャンセル" variant="outline" onPress={onCancel} style={{ flex: 1 }} />
-              <Button title="作成する" variant="primary" onPress={handleSubmit} loading={loading} style={{ flex: 1 }} />
+              <Button title={t('exercise.cancel')} variant="outline" onPress={onCancel} style={{ flex: 1 }} />
+              <Button title={t('exercise.create')} variant="primary" onPress={handleSubmit} loading={loading} style={{ flex: 1 }} />
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
