@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import { useTranslation } from 'react-i18next';
 import { Post } from './Post';
 import { useTimeline } from '../hooks/useTimeline';
 
@@ -11,6 +12,7 @@ type Props = {
 
 export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
   const { posts, loading, refreshing, refresh, loadMore, hasMore } = useTimeline(groupId);
+  const { t } = useTranslation();
 
   const renderFooter = () => {
     if (hasMore) {
@@ -23,7 +25,7 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
     if (posts && posts.length > 0) {
       return (
         <View style={styles.footerLoader}>
-          <Text style={styles.footerText}>これ以上投稿はありません</Text>
+          <Text style={styles.footerText}>{t('timeline.noMore')}</Text>
         </View>
       );
     }
@@ -34,7 +36,7 @@ export const Timeline = ({ groupId, ListHeaderComponent }: Props) => {
     if (loading) return null;
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyText}>投稿がまだありません</Text>
+        <Text style={styles.emptyText}>{t('timeline.empty')}</Text>
       </View>
     );
   };

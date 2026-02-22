@@ -67,7 +67,7 @@ export const ExerciseForm = () => {
     const pickImage = async () => {
         const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!granted) {
-            Alert.alert("許可が必要です", "写真へのアクセス許可が必要です");
+            Alert.alert(t('common.permissionRequired'), t('common.cameraRollPermission'));
             return;
         }
 
@@ -109,7 +109,7 @@ export const ExerciseForm = () => {
             ...activities,
             {
                 id: Date.now().toString(),
-                name: type.name || '名称不明',
+                name: type.name || t('exercise.walking'),
                 intensity: '中',
                 duration: 30,
                 steps: 0,
@@ -158,7 +158,7 @@ export const ExerciseForm = () => {
 
                 const newActivity = {
                     id: Date.now().toString(),
-                    name: walkType?.name || 'ウォーキング',
+                    name: walkType?.name || t('exercise.walking'),
                     intensity: '中',
                     duration: 0,
                     steps: steps,
@@ -250,7 +250,7 @@ export const ExerciseForm = () => {
 
                 {/* --- 詳細入力セクション --- */}
                 <Card style={styles.section}>
-                    <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>記録の詳細</Text>
+                    <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{t('record.details')}</Text>
 
                     {/* 体重入力 */}
                     <Controller
@@ -277,7 +277,7 @@ export const ExerciseForm = () => {
                         render={({ field: { onChange, onBlur, value } }) => (
                             <Input
                                 label="コメント"
-                                placeholder="今日は調子が良かった！"
+                                placeholder={t('record.commentInputPlaceholder')}
                                 value={value}
                                 onChangeText={onChange}
                                 onBlur={onBlur}
@@ -291,7 +291,7 @@ export const ExerciseForm = () => {
 
                     {/* 画像選択 */}
                     <View style={styles.imageSection}>
-                        <Text style={styles.label}>写真 (最大4枚)</Text>
+                        <Text style={styles.label}>{t('record.photos')}</Text>
                         <View style={styles.imageGrid}>
                             {imageUris.map((uri, index) => (
                                 <View key={index} style={styles.thumbnailContainer}>
@@ -319,7 +319,7 @@ export const ExerciseForm = () => {
                         name="postToTimeline"
                         render={({ field: { onChange, value } }) => (
                             <ListItem
-                                title="タイムラインに投稿する"
+                                title={t('record.postToTimelineTitle')}
                                 style={{ paddingHorizontal: 0, borderBottomWidth: 0, paddingVertical: 8 }}
                                 rightElement={
                                     <Switch

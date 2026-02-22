@@ -11,6 +11,7 @@ import { Post } from '../src/features/timeline/components/Post';
 
 // 共通コンポーネント
 import { IconButton } from '../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 type SearchType = 'user' | 'tag';
 
@@ -25,6 +26,7 @@ export default function SearchScreen() {
   const [searchText, setSearchText] = useState(initialQuery);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (initialQuery) {
@@ -85,7 +87,7 @@ export default function SearchScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
           <TextInput
             style={styles.input}
-            placeholder={activeTab === 'user' ? "ユーザーIDで検索" : "タグで検索 (例: running)"}
+            placeholder={activeTab === 'user' ? t('search.userPlaceholder') : t('search.tagPlaceholder')}
             placeholderTextColor="#9CA3AF"
             value={searchText}
             onChangeText={setSearchText}
@@ -107,13 +109,13 @@ export default function SearchScreen() {
           style={[styles.tabItem, activeTab === 'user' && styles.activeTabItem]}
           onPress={() => setActiveTab('user')}
         >
-          <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>ユーザー</Text>
+          <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>{t('search.userTab')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'tag' && styles.activeTabItem]}
           onPress={() => setActiveTab('tag')}
         >
-          <Text style={[styles.tabText, activeTab === 'tag' && styles.activeTabText]}>タグ</Text>
+          <Text style={[styles.tabText, activeTab === 'tag' && styles.activeTabText]}>{t('search.tagTab')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -133,7 +135,7 @@ export default function SearchScreen() {
               contentContainerStyle={{ padding: 16 }}
               ListEmptyComponent={
                 results.length === 0 && !loading ? (
-                  <Text style={styles.emptyText}>投稿が見つかりませんでした</Text>
+                  <Text style={styles.emptyText}>{t('search.noPostsFound')}</Text>
                 ) : null
               }
             />

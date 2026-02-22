@@ -30,7 +30,7 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
 
         <View style={styles.infoContainer}>
           <Text style={styles.name}>
-            {userProfile.username || userProfile.displayName || '名無しさん'}
+            {userProfile.username || userProfile.displayName || t('profile.noName')}
           </Text>
 
           {/* ★★★ ストリーク（継続日数）表示 ★★★ */}
@@ -46,7 +46,7 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
 
           {/* 編集ボタンを共通Buttonに変更 */}
           <Button
-            title="プロフィール編集"
+            title={t('profile.editProfile')}
             variant="outline"
             onPress={() => router.push('/profile/edit')}
             style={styles.editButton}
@@ -65,7 +65,7 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
           onPress={() => router.push({ pathname: '/friends', params: { type: 'following' } })}
         >
           <Text style={styles.statNumber}>{following}</Text>
-          <Text style={styles.statLabel}>フォロー中</Text>
+          <Text style={styles.statLabel}>{t('profile.following')}</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -75,13 +75,13 @@ export const ProfileHeader = ({ userProfile, onLogout }: Props) => {
           onPress={() => router.push({ pathname: '/friends', params: { type: 'followers' } })}
         >
           <Text style={styles.statNumber}>{followers}</Text>
-          <Text style={styles.statLabel}>フォロワー</Text>
+          <Text style={styles.statLabel}>{t('profile.followers')}</Text>
         </TouchableOpacity>
       </View>
 
       {/* ログアウトボタン */}
       <Button
-        title="ログアウト"
+        title={t('auth.logout')}
         variant="ghost"
         onPress={onLogout}
         textStyle={{ color: '#EF4444', fontSize: 12 }}

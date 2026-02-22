@@ -6,6 +6,7 @@ import { FriendsListScreen } from '../src/features/social/components/FriendsList
 
 // 共通コンポーネント
 import { IconButton } from '../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export default function FriendsPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function FriendsPage() {
   const [activeTab, setActiveTab] = useState<'following' | 'followers'>(
     (params.type as 'following' | 'followers') || 'following'
   );
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -24,7 +26,7 @@ export default function FriendsPage() {
           onPress={() => router.back()}
           style={styles.backButton}
         />
-        <Text style={styles.headerTitle}>友達リスト</Text>
+        <Text style={styles.headerTitle}>{t('friends.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -34,7 +36,7 @@ export default function FriendsPage() {
           onPress={() => setActiveTab('following')}
         >
           <Text style={[styles.tabText, activeTab === 'following' && styles.activeTabText]}>
-            フォロー中
+            {t('friends.following')}
           </Text>
         </TouchableOpacity>
 
@@ -43,7 +45,7 @@ export default function FriendsPage() {
           onPress={() => setActiveTab('followers')}
         >
           <Text style={[styles.tabText, activeTab === 'followers' && styles.activeTabText]}>
-            フォロワー
+            {t('friends.followers')}
           </Text>
         </TouchableOpacity>
       </View>

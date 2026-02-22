@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import { collection, query, where, orderBy, onSnapshot, Query } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
+import { useTranslation } from 'react-i18next';
 // 共通コンポーネント
 import { Card } from '../../../ui/Card';
 
@@ -13,6 +14,7 @@ type Props = {
 const ActivityLogComponent = ({ userId, customQuery }: Props) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     let q;
@@ -46,7 +48,10 @@ const ActivityLogComponent = ({ userId, customQuery }: Props) => {
 
   // renderItemのメモ化
   const renderItem = useCallback(({ item }: { item: any }) => {
-    const dateStr = `${item.createdAt.getMonth() + 1}/${item.createdAt.getDate()} (${['日', '月', '火', '水', '木', '金', '土'][item.createdAt.getDay()]})`;
+    const dayNames = i18n.language === 'ja'
+      ? ['日', '月', '火', '水', '木', '金', '土']
+      : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dateStr = `${item.createdAt.getMonth() + 1}/${item.createdAt.getDate()} (${dayNames[item.createdAt.getDay()]})`;
 
     return (
       <Card style={styles.logCard}>
@@ -58,7 +63,7 @@ const ActivityLogComponent = ({ userId, customQuery }: Props) => {
           <View key={idx} style={styles.activityRow}>
             <Text style={styles.activityName}>・{act.name}</Text>
             <Text style={styles.activityDetail}>
-              {act.duration > 0 ? `${act.duration}分` : `${act.steps}歩`}
+              {act.duration > 0 ? t('activityLog.minutes', { count: act.duration }) : t('activityLog.steps', { count: act.steps })}
             </Text>
           </View>
         ))}
@@ -68,7 +73,7 @@ const ActivityLogComponent = ({ userId, customQuery }: Props) => {
         ) : null}
       </Card>
     );
-  }, []);
+  }, [i18n.language, t]);
 
   const keyExtractor = useCallback((item: any) => item.id, []);
 
@@ -78,7 +83,7 @@ const ActivityLogComponent = ({ userId, customQuery }: Props) => {
 
   return (
     <View style={styles.container}>
-      {!customQuery && <Text style={styles.sectionTitle}>最近の活動</Text>}
+      {!customQuery && <Text style={styles.sectionTitle}>{t('activityLog.recentActivity')}</Text>}
 
       <FlatList
         data={logs}
@@ -87,7 +92,7 @@ const ActivityLogComponent = ({ userId, customQuery }: Props) => {
         scrollEnabled={false} // 親がScrollViewの場合はfalseでOK
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>まだ記録がありません</Text>
+            <Text style={styles.emptyText}>{t('activityLog.noRecords')}</Text>
           </View>
         }
       />

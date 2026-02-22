@@ -7,10 +7,12 @@ import { GroupCard } from '../../src/features/groups/components/GroupCard';
 
 // 共通コンポーネント
 import { IconButton } from '../../src/ui/IconButton';
+import { useTranslation } from 'react-i18next';
 
 export default function GroupsListScreen() {
   const router = useRouter();
   const { groups, loading } = useGroups();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -22,7 +24,7 @@ export default function GroupsListScreen() {
           color="#333"
           onPress={() => router.back()}
         />
-        <Text style={styles.title}>グループを探す</Text>
+        <Text style={styles.title}>{t('group.explorTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -36,7 +38,7 @@ export default function GroupsListScreen() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>まだグループがありません</Text>
+              <Text style={styles.emptyText}>{t('group.noGroups')}</Text>
             </View>
           }
         />

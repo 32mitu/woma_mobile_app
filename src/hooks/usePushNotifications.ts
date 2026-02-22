@@ -7,6 +7,7 @@ import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import i18n from '../i18n';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -97,8 +98,8 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
 
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: "今日の記録は済みましたか？",
-          body: "21時になりました。今日の活動を記録して、自分を褒めましょう！",
+          title: i18n.t('pushNotification.reminderTitle'),
+          body: i18n.t('pushNotification.reminderBody'),
           sound: 'default',
           data: { type: 'reminder' },
         },

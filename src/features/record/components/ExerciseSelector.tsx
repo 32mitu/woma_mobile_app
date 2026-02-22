@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Modal, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 // 修正: パスを components/ui から ui に変更
 import { ListItem } from '../../../ui/ListItem';
 import { IconButton } from '../../../ui/IconButton';
@@ -17,14 +18,15 @@ type Props = {
 };
 
 export const ExerciseSelector = ({ visible, availableTypes, onClose, onSelect, onCreateNew, onDelete }: Props) => {
+  const { t } = useTranslation();
 
   const handleDelete = (item: any) => {
     Alert.alert(
-      "運動種目の削除",
-      `「${item.name}」を削除しますか？\nこの操作は取り消せません。`,
+      t('exercise.deleteTitle'),
+      t('exercise.deleteMessage', { name: item.name }),
       [
-        { text: "キャンセル", style: "cancel" },
-        { text: "削除", style: "destructive", onPress: () => onDelete(item.id) }
+        { text: t('common.cancel'), style: "cancel" },
+        { text: t('exercise.deleteConfirm'), style: "destructive", onPress: () => onDelete(item.id) }
       ]
     );
   };
@@ -32,7 +34,7 @@ export const ExerciseSelector = ({ visible, availableTypes, onClose, onSelect, o
   const renderItem = ({ item }: { item: any }) => (
     <ListItem
       title={item.name}
-      subtitle={item.custom ? 'カスタム' : 'デフォルト'}
+      subtitle={item.custom ? t('exercise.custom') : t('exercise.default')}
       leftElement={
         <View style={[styles.iconContainer, item.custom && styles.customIcon]}>
           <Ionicons name={item.custom ? "star" : "bicycle"} size={20} color={item.custom ? "#D97706" : "#3B82F6"} />
@@ -52,7 +54,7 @@ export const ExerciseSelector = ({ visible, availableTypes, onClose, onSelect, o
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
-          <Text style={styles.title}>運動を選択</Text>
+          <Text style={styles.title}>{t('exercise.selectExercise')}</Text>
           <IconButton name="close" size={24} onPress={onClose} />
         </View>
 
@@ -61,12 +63,12 @@ export const ExerciseSelector = ({ visible, availableTypes, onClose, onSelect, o
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.emptyText}>登録された運動がありません</Text>}
+          ListEmptyComponent={<Text style={styles.emptyText}>{t('exercise.noneRegistered')}</Text>}
         />
 
         <View style={styles.footer}>
           <Button
-            title="新しい運動を作成"
+            title={t('exercise.newExercise')}
             variant="outline"
             icon={<Ionicons name="add" size={20} color="#3B82F6" />}
             onPress={onCreateNew}

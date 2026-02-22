@@ -3,6 +3,7 @@ import { doc, updateDoc, arrayUnion, addDoc, collection, serverTimestamp } from 
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../features/auth/useAuth';
 import { Alert } from 'react-native';
+import i18n from '../i18n';
 
 export const useSafety = () => {
   const { userProfile } = useAuth();
@@ -21,10 +22,10 @@ export const useSafety = () => {
         createdAt: serverTimestamp(),
       });
       console.log(`✅ [Report] ${type} reported: ${targetId}`);
-      Alert.alert("報告ありがとうございます", "運営チームが内容を確認し、適切に対処いたします。");
+      Alert.alert(i18n.t('safety.reportThanks'), i18n.t('safety.reportMessage'));
     } catch (e) {
       console.error("Report failed:", e);
-      Alert.alert("エラー", "報告の送信に失敗しました。");
+      Alert.alert(i18n.t('safety.error'), i18n.t('safety.reportFailed'));
     } finally {
       setLoading(false);
     }
@@ -33,31 +34,31 @@ export const useSafety = () => {
   // ブロック機能
   const blockUser = async (targetUserId: string) => {
     if (!userProfile?.uid) return;
-    
+
     Alert.alert(
-      "ユーザーをブロック",
-      "このユーザーの投稿が表示されなくなります。本当にブロックしますか？",
+      i18n.t('safety.blockTitle'),
+      i18n.t('safety.blockMessage'),
       [
-        { text: "キャンセル", style: "cancel" },
-        { 
-          text: "ブロックする", 
+        { text: i18n.t('common.cancel'), style: "cancel" },
+        {
+          text: i18n.t('safety.blockConfirm'),
           style: "destructive",
           onPress: async () => {
             setLoading(true);
             try {
               console.log(`🚫 [Block] Blocking user: ${targetUserId}`);
               const userRef = doc(db, 'users', userProfile.uid);
-              
+
               // Firestore配列への追加
               await updateDoc(userRef, {
                 blockedUsers: arrayUnion(targetUserId)
               });
-              
+
               console.log("✅ [Block] Success. Firestore updated.");
-              Alert.alert("完了", "ブロックしました。");
+              Alert.alert(i18n.t('safety.blockSuccess'), i18n.t('safety.blockSuccessMessage'));
             } catch (e) {
               console.error("Block failed:", e);
-              Alert.alert("エラー", "ブロックに失敗しました。");
+              Alert.alert(i18n.t('safety.error'), i18n.t('safety.blockFailed'));
             } finally {
               setLoading(false);
             }

@@ -197,7 +197,7 @@ export default function LoginScreen() {
 
             <View style={styles.headerSection}>
               <Text style={styles.title}>WOMA</Text>
-              <Text style={styles.subtitle}>3日坊主を、肯定する。</Text>
+              <Text style={styles.subtitle}>{t('auth.subtitle')}</Text>
             </View>
 
             <View style={styles.formContainer}>

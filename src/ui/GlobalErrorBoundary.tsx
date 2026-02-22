@@ -1,18 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ErrorBoundary, FallbackProps } from 'react-error-boundary';
-import { Button } from './Button'; // 既存の共通ボタンを使用
+import { Button } from './Button';
+import i18n from '../i18n';
 
 // エラー時に表示されるフォールバックUI
 const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
     return (
         <View style={styles.container}>
             <Text style={styles.icon}>😢</Text>
-            <Text style={styles.title}>予期せぬエラーが発生しました</Text>
+            <Text style={styles.title}>{i18n.t('errorBoundary.title')}</Text>
             <Text style={styles.message}>{error.message}</Text>
 
             <Button
-                title="アプリを再起動（リロード）"
+                title={i18n.t('errorBoundary.reload')}
                 onPress={resetErrorBoundary}
                 variant="primary"
                 style={styles.button}

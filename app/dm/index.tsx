@@ -9,12 +9,14 @@ import { Ionicons } from '@expo/vector-icons';
 // 共通コンポーネント
 import { ListItem } from '../../src/ui/ListItem';
 import { Avatar } from '../../src/ui/Avatar';
+import { useTranslation } from 'react-i18next';
 
 export default function ChatListScreen() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const [chatRooms, setChatRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
   // ユーザー情報のメモリキャッシュ
   const userCache = useRef<{ [key: string]: { name: string, avatar: string | null } }>({});
@@ -47,7 +49,7 @@ export default function ChatListScreen() {
               const userSnap = await getDoc(doc(db, 'users', partnerId));
               if (userSnap.exists()) {
                 const userData = userSnap.data();
-                partnerName = userData.username || userData.displayName || '名無し';
+                partnerName = userData.username || userData.displayName || t('dm.noName');
                 partnerAvatar = userData.profileImageUrl || userData.photoURL || null;
                 // キャッシュ保存
                 userCache.current[partnerId] = { name: partnerName, avatar: partnerAvatar };
@@ -83,7 +85,7 @@ export default function ChatListScreen() {
     return (
       <ListItem
         title={item.partnerName}
-        subtitle={item.lastMessage || '画像が送信されました'}
+        subtitle={item.lastMessage || t('dm.imagesSent')}
         leftElement={
           <Avatar
             uri={item.partnerAvatar}
@@ -123,7 +125,7 @@ export default function ChatListScreen() {
         ListEmptyComponent={
           <View style={styles.center}>
             <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 10 }} />
-            <Text style={{ color: '#888' }}>メッセージはまだありません</Text>
+            <Text style={{ color: '#888' }}>{t('dm.noMessages')}</Text>
           </View>
         }
       />

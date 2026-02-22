@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 // 共通コンポーネント
 import { Button } from '../../../ui/Button';
 import { Input } from '../../../ui/Input';
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: Props) => {
+  const { t } = useTranslation();
 
   // カロリー概算
   const estimatedCalories = useMemo(() => {
@@ -36,9 +38,6 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
 
   // 強度変更ハンドラ
   const handleIntensityChange = (level: '低' | '中' | '高') => {
-    // 親コンポーネント(RecordForm)側で「強度が変わればMETsも再計算する」ロジックが入っているため、
-    // ここでは強度(intensity)の更新のみを通知すればOKです。
-    // 2回連続でonUpdateを呼ぶと、ステート更新が競合して片方が打ち消されることがあります。
     onUpdate(activity.id, 'intensity', level);
   };
 
@@ -51,6 +50,13 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
     const val = parseInt(text, 10);
     onUpdate(activity.id, 'steps', isNaN(val) ? 0 : val);
   };
+
+  // 強度ボタンのUI表示ラベル（内部値は '低'/'中'/'高' のままFirestoreへ保存）
+  const intensityLevels: Array<{ key: '低' | '中' | '高'; label: string }> = [
+    { key: '低', label: t('exercise.low') },
+    { key: '中', label: t('exercise.mid') },
+    { key: '高', label: t('exercise.high') },
+  ];
 
   return (
     <View style={styles.container}>
@@ -70,15 +76,15 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
 
       {/* 強度選択ボタン */}
       <View style={styles.section}>
-        <Text style={styles.label}>強度</Text>
+        <Text style={styles.label}>{t('exercise.intensity')}</Text>
         <View style={styles.intensityRow}>
-          {(['低', '中', '高'] as const).map((level) => (
+          {intensityLevels.map(({ key, label }) => (
             <Button
-              key={level}
-              title={level}
+              key={key}
+              title={label}
               // 選択中は primary (青), 未選択は outline (枠線のみ)
-              variant={activity.intensity === level ? 'primary' : 'outline'}
-              onPress={() => handleIntensityChange(level)}
+              variant={activity.intensity === key ? 'primary' : 'outline'}
+              onPress={() => handleIntensityChange(key)}
               style={styles.intensityButton}
               textStyle={{ fontSize: 13 }}
             />
@@ -90,7 +96,7 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
       <View style={styles.row}>
         <View style={{ flex: 1, marginRight: 8 }}>
           <Input
-            label="時間 (分)"
+            label={t('exercise.duration')}
             value={activity.duration > 0 ? String(activity.duration) : ''}
             onChangeText={handleDurationChange}
             keyboardType="numeric"
@@ -100,7 +106,7 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
         </View>
         <View style={{ flex: 1, marginLeft: 8 }}>
           <Input
-            label="歩数 (任意)"
+            label={t('exercise.steps')}
             value={activity.steps && activity.steps > 0 ? String(activity.steps) : ''}
             onChangeText={handleStepsChange}
             keyboardType="numeric"
@@ -113,7 +119,7 @@ export const ActivityInput = ({ index, activity, onUpdate, onRemove, weight }: P
       {/* カロリー表示 */}
       <View style={styles.footer}>
         <Text style={styles.calorieText}>
-          推定消費カロリー: <Text style={styles.calorieValue}>{estimatedCalories} kcal</Text>
+          {t('exercise.estimatedCalories')}<Text style={styles.calorieValue}>{estimatedCalories} kcal</Text>
         </Text>
       </View>
     </View>
