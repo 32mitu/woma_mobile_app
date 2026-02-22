@@ -68,10 +68,10 @@ const PostComponent = ({ post }: PostProps) => {
   // ユーザー情報の初期化
   const [userInfo, setUserInfo] = useState<{ displayName: string; photoURL: string } | null>(() => {
     if (post.username || post.userIcon) {
-      return { displayName: post.username || '名無し', photoURL: post.userIcon || '' };
+      return { displayName: post.username || t('timeline.noName'), photoURL: post.userIcon || '' };
     }
     if (post.user) {
-      return { displayName: post.user.displayName || '名無し', photoURL: post.user.photoURL || '' };
+      return { displayName: post.user.displayName || t('timeline.noName'), photoURL: post.user.photoURL || '' };
     }
     return null;
   });
@@ -108,7 +108,7 @@ const PostComponent = ({ post }: PostProps) => {
       if (snap.exists() && isMounted) {
         const data = snap.data();
         setUserInfo({
-          displayName: data.username || data.displayName || '名無し',
+          displayName: data.username || data.displayName || t('timeline.noName'),
           photoURL: data.profileImageUrl || data.photoURL || ''
         });
       }
@@ -137,7 +137,7 @@ const PostComponent = ({ post }: PostProps) => {
       });
       // 通知ロジック (省略せず実装)
       if (!isRemoving && targetUid && targetUid !== currentUser.uid && (!previousReactions[currentUser.uid] || previousReactions[currentUser.uid] !== type)) {
-        await sendPushNotification(targetUid, t('notification.reactionTitle'), `${userInfo?.displayName || '誰か'}が${reactionEmojis[type]}しました`);
+        await sendPushNotification(targetUid, t('notification.reactionTitle'), `${userInfo?.displayName || t('notification.someone')}${reactionEmojis[type]}`);
       }
     } catch (error) {
       setLocalReactions(previousReactions);
@@ -201,7 +201,7 @@ const PostComponent = ({ post }: PostProps) => {
       {/* ★★★ 獲得バッジ表示セクション ★★★ */}
       {badgesToShow.length > 0 && (
         <View style={styles.earnedBadgesContainer}>
-          <Text style={styles.earnedBadgesTitle}>🎉 バッジ獲得！</Text>
+          <Text style={styles.earnedBadgesTitle}>{t('timeline.earnedBadge')}</Text>
           <View style={styles.badgesRow}>
             {badgesToShow.map((badgeId) => {
               const badge = BADGES.find(b => b.id === badgeId);

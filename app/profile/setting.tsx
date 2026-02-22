@@ -89,32 +89,32 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                     onPress={() => router.back()}
                     className="mr-4"
-                    accessibilityLabel={t('accessibility.back', '戻る')}
+                    accessibilityLabel={t('accessibility.back')}
                 >
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
                 <Text className="text-lg font-bold text-gray-800">
-                    {t('settings.title', '設定')}
+                    {t('settings.title')}
                 </Text>
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
                 {/* 外観・言語 */}
-                <SectionHeader title={t('settings.general', '一般設定')} />
+                <SectionHeader title={t('settings.general')} />
                 <SettingRow
                     icon="language"
-                    label={t('settings.language', 'Language / 言語')}
+                    label={t('settings.language')}
                     value={language === 'ja' ? '日本語' : 'English'}
                     onPress={handleLanguageToggle}
                     accessibilityLabel="Change language"
                 />
 
                 {/* 通知・機能 */}
-                <SectionHeader title={t('settings.notifications', '通知')} />
+                <SectionHeader title={t('settings.notifications')} />
                 <SettingRow
                     icon="notifications"
-                    label={t('settings.pushNotification', 'プッシュ通知')}
+                    label={t('settings.pushNotification')}
                     isSwitch
                     switchValue={isNotifEnabled}
                     onSwitchChange={setIsNotifEnabled}
@@ -122,16 +122,16 @@ export default function SettingsScreen() {
                 />
 
                 {/* サポート */}
-                <SectionHeader title={t('settings.support', 'サポート')} />
+                <SectionHeader title={t('settings.support')} />
                 <SettingRow
                     icon="document-text"
-                    label={t('settings.terms', '利用規約')}
+                    label={t('settings.terms')}
                     onPress={openTerms}
                     accessibilityLabel="Open terms of service"
                 />
                 <SettingRow
                     icon="shield-checkmark"
-                    label={t('settings.privacy', 'プライバシーポリシー')}
+                    label={t('settings.privacy')}
                     onPress={openTerms} // 必要に応じてプライバシーポリシー用のURLに変更してください
                     accessibilityLabel="Open privacy policy"
                 />

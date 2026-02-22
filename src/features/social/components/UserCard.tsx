@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../auth/useAuth';
 import { useSocial, useIsFollowing } from '../hooks/useSocial';
+import { useTranslation } from 'react-i18next';
 
 // 共通コンポーネント
 import { Card } from '../../../ui/Card';
@@ -18,6 +19,7 @@ export const UserCard = ({ user }: Props) => {
   const router = useRouter();
   const { userProfile } = useAuth();
   const { followUser, unfollowUser, loading } = useSocial();
+  const { t } = useTranslation();
 
   // リアルタイムなフォロー状態を取得
   const isFollowing = useIsFollowing(user.uid);
@@ -34,7 +36,7 @@ export const UserCard = ({ user }: Props) => {
   return (
     <Card padding="none" style={styles.card}>
       <ListItem
-        title={user.username || user.displayName || '名無しさん'}
+        title={user.username || user.displayName || t('social.noName')}
         subtitle={user.bio}
         leftElement={
           <Avatar
@@ -45,7 +47,7 @@ export const UserCard = ({ user }: Props) => {
         rightElement={
           !isMe ? (
             <Button
-              title={loading ? '...' : (isFollowing ? 'フォロー中' : 'フォロー')}
+              title={loading ? '...' : (isFollowing ? t('social.following') : t('social.follow'))}
               variant={isFollowing ? 'outline' : 'primary'}
               onPress={handleFollowPress}
               disabled={loading}

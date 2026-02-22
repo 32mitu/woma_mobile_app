@@ -5,12 +5,14 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
+import { useTranslation } from 'react-i18next';
 
 const COLLECTION_NAME = 'follows';
 
 // 1. フォロー・フォロー解除アクション
 export const useSocial = () => {
   const { userProfile } = useAuth();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   const followUser = async (targetUserId: string) => {
@@ -27,7 +29,7 @@ export const useSocial = () => {
       console.log(`Followed ${targetUserId}`);
     } catch (error) {
       console.error("Follow error:", error);
-      alert("フォローに失敗しました");
+      alert(t('social.followFailed'));
     } finally {
       setLoading(false);
     }
@@ -43,7 +45,7 @@ export const useSocial = () => {
       console.log(`Unfollowed ${targetUserId}`);
     } catch (error) {
       console.error("Unfollow error:", error);
-      alert("フォロー解除に失敗しました");
+      alert(t('social.unfollowFailed'));
     } finally {
       setLoading(false);
     }

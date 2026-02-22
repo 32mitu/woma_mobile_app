@@ -3,7 +3,7 @@
     "name": "woma-mobile",
     "slug": "woma-mobile",
     "scheme": "woma-mobile",
-    "version": "1.0.2",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/home_icon.png",
     "userInterfaceStyle": "light",

@@ -30,7 +30,7 @@ export default function LoginScreen() {
 
   // 言語設定用のStoreとi18nを取得
   const { language, setLanguage } = useUiStore();
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [socialLoading, setSocialLoading] = useState(false);
@@ -93,20 +93,20 @@ export default function LoginScreen() {
           blockedUsers: [],
         });
 
-        Alert.alert("登録成功", "アカウントが作成されました！", [
-          { text: "OK", onPress: () => router.replace('/(tabs)/home') }
+        Alert.alert(t('auth.signupSuccess'), t('auth.accountCreated'), [
+          { text: t('common.ok'), onPress: () => router.replace('/(tabs)/home') }
         ]);
       }
     } catch (error: any) {
       console.error(error);
-      let msg = "エラーが発生しました";
-      if (error.code === 'auth/email-already-in-use') msg = "このメールアドレスは既に使用されています";
+      let msg = t('auth.errorOccurred');
+      if (error.code === 'auth/email-already-in-use') msg = t('auth.emailAlreadyInUse');
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        msg = "メールアドレスまたはパスワードが間違っています";
+        msg = t('auth.wrongCredentials');
       }
-      if (error.code === 'auth/weak-password') msg = "パスワードは6文字以上にしてください";
+      if (error.code === 'auth/weak-password') msg = t('auth.weakPassword');
 
-      Alert.alert("エラー", msg);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
@@ -207,12 +207,12 @@ export default function LoginScreen() {
                   name="username"
                   render={({ field: { onChange, onBlur, value } }) => (
                     <Input
-                      label="ユーザー名"
-                      placeholder="表示名を入力"
+                      label={t('profile.username')}
+                      placeholder={t('auth.usernamePlaceholder')}
                       value={value}
                       onChangeText={onChange}
                       onBlur={onBlur}
-                      error={errors.username?.message}
+                      error={errors.username?.message ? t(errors.username.message) : undefined}
                       autoCapitalize="none"
                     />
                   )}
@@ -224,12 +224,12 @@ export default function LoginScreen() {
                 name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="メールアドレス"
+                    label={t('auth.email')}
                     placeholder="example@woma.com"
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
-                    error={errors.email?.message}
+                    error={errors.email?.message ? t(errors.email.message) : undefined}
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
@@ -241,12 +241,12 @@ export default function LoginScreen() {
                 name="password"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="パスワード"
-                    placeholder="6文字以上"
+                    label={t('auth.password')}
+                    placeholder={t('auth.passwordPlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
-                    error={errors.password?.message}
+                    error={errors.password?.message ? t(errors.password.message) : undefined}
                     secureTextEntry
                     autoCapitalize="none"
                   />
@@ -254,7 +254,7 @@ export default function LoginScreen() {
               />
 
               <Button
-                title={isLoginMode ? 'ログイン' : '新規登録'}
+                title={isLoginMode ? t('auth.login') : t('auth.signup')}
                 onPress={handleSubmit(onSubmit)}
                 loading={isSubmitting || socialLoading}
                 variant="primary"
@@ -264,16 +264,16 @@ export default function LoginScreen() {
               {!isLoginMode && (
                 <View style={styles.termsContainer}>
                   <Text style={styles.termsText}>
-                    登録することで、
-                    <Text style={styles.linkText} onPress={openTerms}>利用規約</Text>
-                    に同意したものとみなされます。
+                    {t('auth.agreeToTerms')}
+                    <Text style={styles.linkText} onPress={openTerms}>{t('auth.termsOfService')}</Text>
+                    {t('auth.agreeToTermsEnd')}
                   </Text>
                 </View>
               )}
 
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>または</Text>
+                <Text style={styles.dividerText}>{t('auth.or')}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -287,7 +287,7 @@ export default function LoginScreen() {
                 />
 
                 <Button
-                  title="Googleで続ける"
+                  title={t('auth.continueWithGoogle')}
                   variant="secondary"
                   icon={<Ionicons name="logo-google" size={20} color="#DB4437" />}
                   onPress={handleGoogleLogin}
@@ -297,7 +297,7 @@ export default function LoginScreen() {
               </View>
 
               <Button
-                title={isLoginMode ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方'}
+                title={isLoginMode ? t('auth.noAccount') : t('auth.alreadyHaveAccount')}
                 variant="ghost"
                 onPress={() => setIsLoginMode(!isLoginMode)}
                 style={styles.switchButton}

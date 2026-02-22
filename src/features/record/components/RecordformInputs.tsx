@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Switch, Alert, Image, TouchableOpacity } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 // 修正: パスを components/ui から ui に変更
 import { Input } from '../../../ui/Input';
 
@@ -22,11 +23,12 @@ export const RecordFormInputs = ({
   imageUris, setImageUris,
   postToTimeline, setPostToTimeline
 }: Props) => {
+  const { t } = useTranslation();
 
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
-      Alert.alert("アクセス許可が必要です", "カメラロールへのアクセスを許可してください。");
+      Alert.alert(t('record.permissionTitle'), t('record.permissionMessage'));
       return;
     }
 
@@ -52,27 +54,27 @@ export const RecordFormInputs = ({
   return (
     <View style={styles.container}>
       <Input
-        label="今日の体重 (kg)"
+        label={t('record.weightLabel')}
         value={weight}
         onChangeText={setWeight}
         keyboardType="numeric"
-        placeholder="例: 60.5"
+        placeholder={t('record.weightPlaceholder')}
         containerStyle={styles.inputGap}
         rightElement={<Text style={styles.unitText}>kg</Text>}
       />
 
       <Input
-        label="ひとことメモ"
+        label={t('record.commentLabel')}
         value={comment}
         onChangeText={setComment}
-        placeholder="今日の運動の感想や体調など"
+        placeholder={t('record.commentPlaceholder')}
         multiline
         numberOfLines={4}
         containerStyle={styles.inputGap}
       />
 
       <View style={styles.section}>
-        <Text style={styles.label}>写真 (最大5枚)</Text>
+        <Text style={styles.label}>{t('record.photoLabel')}</Text>
         <View style={styles.imageContainer}>
           {imageUris.map((uri, index) => (
             <View key={index} style={styles.thumbnailWrapper}>
@@ -91,7 +93,7 @@ export const RecordFormInputs = ({
       </View>
 
       <View style={styles.switchRow}>
-        <Text style={styles.label}>タイムラインに投稿する</Text>
+        <Text style={styles.label}>{t('record.postToTimeline')}</Text>
         <Switch
           value={postToTimeline}
           onValueChange={setPostToTimeline}

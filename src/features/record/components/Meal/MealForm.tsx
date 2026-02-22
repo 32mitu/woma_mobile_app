@@ -16,6 +16,7 @@ import { useMealHistory, MealTemplate } from './useMealHistory';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../../../firebaseConfig';
 import { useAuth } from '../../../auth/useAuth';
+import { useTranslation } from 'react-i18next';
 
 // タブ定義
 type TabType = 'scan' | 'history' | 'myset';
@@ -23,6 +24,7 @@ type TabType = 'scan' | 'history' | 'myset';
 export const MealForm = () => {
     const { user } = useAuth();
     const router = useRouter();
+    const { t } = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
 
     // 履歴・マイセット用フック
@@ -68,7 +70,7 @@ export const MealForm = () => {
     const onSubmit = async (data: { comment: string }) => {
         if (!user) return;
         if (scannedItems.length === 0 && !data.comment.trim()) {
-            Alert.alert('エラー', '食べたものかメモを入力してください');
+            Alert.alert(t('common.error'), t('meal.errorNoItems'));
             return;
         }
 
@@ -87,10 +89,10 @@ export const MealForm = () => {
                 createdAt: serverTimestamp(),
                 date: new Date().toISOString()
             });
-            Alert.alert('保存完了', '食事を記録しました！', [{ text: 'OK', onPress: () => router.back() }]);
+            Alert.alert(t('meal.saveSuccess'), t('meal.saveSuccessMessage'), [{ text: t('common.ok'), onPress: () => router.back() }]);
         } catch (e: any) {
             console.error("保存エラー詳細:", e);
-            Alert.alert('エラー', `保存に失敗しました: ${e.message}`);
+            Alert.alert(t('common.error'), t('meal.saveFailed', { error: e.message }));
         } finally {
             setIsSaving(false);
         }
@@ -100,22 +102,22 @@ export const MealForm = () => {
         setScannedItems(prev => [...prev, { ...item }]);
         // スキャン以外の追加ならフィードバックを出す
         if (!isScannerVisible) {
-            Alert.alert('追加しました', `${item.name} をリストに追加しました`);
+            Alert.alert(t('meal.addedItem'), t('meal.addedItemMessage', { name: item.name }));
         }
     };
 
     const handleLoadTemplate = (template: MealTemplate) => {
         setScannedItems(prev => [...prev, ...template.items]);
-        Alert.alert('反映しました', `マイセット「${template.name}」を追加しました`);
+        Alert.alert(t('meal.appliedSet'), t('meal.appliedSetMessage', { name: template.name }));
     };
 
     const handleSaveTemplate = async () => {
         if (!templateName.trim()) {
-            Alert.alert('エラー', 'マイセット名を入力してください');
+            Alert.alert(t('common.error'), t('meal.errorNoSetName'));
             return;
         }
         if (scannedItems.length === 0) {
-            Alert.alert('エラー', '保存する食品がリストにありません');
+            Alert.alert(t('common.error'), t('meal.errorNoFoodInList'));
             return;
         }
         try {
@@ -124,11 +126,11 @@ export const MealForm = () => {
 
             await saveTemplate(templateName, cleanItems);
             setTemplateName('');
-            Alert.alert('完了', '現在のリストをマイセットに保存しました');
+            Alert.alert(t('meal.savedSet'), t('meal.savedSetMessage'));
             setActiveTab('myset'); // マイセットタブへ移動
         } catch (e) {
             console.error(e);
-            Alert.alert('エラー', '保存できませんでした');
+            Alert.alert(t('common.error'), t('meal.saveSetFailed'));
         }
     };
 
@@ -139,24 +141,24 @@ export const MealForm = () => {
     // タブ描画コンポーネント
     const renderTabs = () => (
         <View style={styles.tabContainer}>
-            <Badge label="スキャン" onPress={() => setActiveTab('scan')} selected={activeTab === 'scan'} />
-            <Badge label="履歴" onPress={() => setActiveTab('history')} selected={activeTab === 'history'} />
-            <Badge label="マイセット" onPress={() => setActiveTab('myset')} selected={activeTab === 'myset'} />
+            <Badge label={t('meal.tabScan')} onPress={() => setActiveTab('scan')} selected={activeTab === 'scan'} />
+            <Badge label={t('meal.tabHistory')} onPress={() => setActiveTab('history')} selected={activeTab === 'history'} />
+            <Badge label={t('meal.tabMyset')} onPress={() => setActiveTab('myset')} selected={activeTab === 'myset'} />
         </View>
     );
 
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.pageTitle}>食事入力</Text>
+                <Text style={styles.pageTitle}>{t('meal.title')}</Text>
 
                 {/* 食品リスト (常に表示) */}
                 {scannedItems.length > 0 && (
                     <Card style={styles.listCard} padding="none">
                         <View style={styles.listHeader}>
-                            <Text style={styles.sectionTitle}>選択中の食品 ({scannedItems.length})</Text>
+                            <Text style={styles.sectionTitle}>{t('meal.selectedItems', { count: scannedItems.length })}</Text>
                             <TouchableOpacity onPress={() => setScannedItems([])}>
-                                <Text style={{ color: '#EF4444', fontSize: 12 }}>全削除</Text>
+                                <Text style={{ color: '#EF4444', fontSize: 12 }}>{t('meal.removeAll')}</Text>
                             </TouchableOpacity>
                         </View>
                         {scannedItems.map((item, index) => (
@@ -172,19 +174,19 @@ export const MealForm = () => {
                             />
                         ))}
                         <View style={styles.totalRow}>
-                            <Text style={styles.totalLabel}>合計:</Text>
+                            <Text style={styles.totalLabel}>{t('meal.total')}</Text>
                             <Text style={styles.totalValue}>{totalCalories} kcal</Text>
                         </View>
 
                         {/* マイセット保存ボタン */}
                         <View style={styles.saveTemplateRow}>
                             <Input
-                                placeholder="セット名 (例: 朝の定番)"
+                                placeholder={t('meal.setNamePlaceholder')}
                                 value={templateName}
                                 onChangeText={setTemplateName}
                                 containerStyle={{ marginBottom: 0, flex: 1 }}
                             />
-                            <Button title="セット保存" size="sm" variant="outline" onPress={handleSaveTemplate} />
+                            <Button title={t('meal.saveSet')} size="sm" variant="outline" onPress={handleSaveTemplate} />
                         </View>
                     </Card>
                 )}
@@ -196,19 +198,19 @@ export const MealForm = () => {
                     {activeTab === 'scan' && (
                         <View style={styles.scanAction}>
                             <Button
-                                title="カメラを起動"
+                                title={t('meal.startCamera')}
                                 onPress={() => setScannerVisible(true)}
                                 variant="primary"
                                 icon={<Text style={{ fontSize: 18, marginRight: 8, color: 'white' }}>📷</Text>}
                             />
-                            <Text style={styles.helperText}>バーコードを読み取って追加</Text>
+                            <Text style={styles.helperText}>{t('meal.scanHelper')}</Text>
                         </View>
                     )}
 
                     {activeTab === 'history' && (
                         <View>
                             {historyItems.length === 0 ? (
-                                <Text style={styles.emptyText}>履歴がありません</Text>
+                                <Text style={styles.emptyText}>{t('meal.noHistory')}</Text>
                             ) : (
                                 historyItems.map((item, index) => (
                                     <ListItem
@@ -226,7 +228,7 @@ export const MealForm = () => {
                     {activeTab === 'myset' && (
                         <View>
                             {templates.length === 0 ? (
-                                <Text style={styles.emptyText}>マイセットがありません。{'\n'}食品を選択して「セット保存」してください。</Text>
+                                <Text style={styles.emptyText}>{t('meal.noMyset')}</Text>
                             ) : (
                                 templates.map((tpl) => (
                                     <Card key={tpl.id} style={{ marginBottom: 12 }}>
@@ -237,7 +239,7 @@ export const MealForm = () => {
                                         <Text style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
                                             {tpl.items.map(i => i.name).join(', ')}
                                         </Text>
-                                        <Button title="このセットを追加" size="sm" onPress={() => handleLoadTemplate(tpl)} />
+                                        <Button title={t('meal.addThisSet')} size="sm" onPress={() => handleLoadTemplate(tpl)} />
                                     </Card>
                                 ))
                             )}
@@ -251,12 +253,12 @@ export const MealForm = () => {
                         control={control}
                         name="comment"
                         render={({ field: { onChange, value } }) => (
-                            <Input label="メモ" value={value} onChangeText={onChange} multiline placeholder="一言メモ..." containerStyle={{ marginBottom: 0 }} />
+                            <Input label={t('meal.memoLabel')} value={value} onChangeText={onChange} multiline placeholder={t('meal.memoPlaceholder')} containerStyle={{ marginBottom: 0 }} />
                         )}
                     />
                 </Card>
 
-                <Button title={isSaving ? "保存中..." : "記録する"} onPress={handleSubmit(onSubmit)} size="lg" disabled={isSaving} />
+                <Button title={isSaving ? t('meal.saving') : t('meal.save')} onPress={handleSubmit(onSubmit)} size="lg" disabled={isSaving} />
 
             </ScrollView>
 
