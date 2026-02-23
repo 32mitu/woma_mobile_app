@@ -14,9 +14,12 @@ import {
   Permission,
 } from 'react-native-health-connect';
 
+// 🌟 修正: 'StepCount' を使用し、環境によるクラッシュを防ぐ安全なフォールバックを設定
+const STEP_PERMISSION = AppleHealthKit?.Constants?.Permissions?.StepCount || 'StepCount';
+
 const iosPermissions: HealthKitPermissions = {
   permissions: {
-    read: [AppleHealthKit?.Constants?.Permissions?.Steps],
+    read: [STEP_PERMISSION],
     write: [],
   },
 };
@@ -31,7 +34,6 @@ export const useHealthKit = () => {
   const fetchSteps = useCallback(async () => {
     console.log('[HealthKit] fetchSteps called');
 
-    // 権限がない状態で呼ぶとクラッシュすることがあるためガード
     if (!isAvailable && Platform.OS === 'android') {
       console.log('[HealthKit] Android: isAvailable is false. Skipping fetch.');
       return;
@@ -44,10 +46,13 @@ export const useHealthKit = () => {
         date: new Date().toISOString(),
         includeManuallyAdded: true,
       };
+
       AppleHealthKit.getStepCount(options, (err: Object, results: HealthValue) => {
         setLoading(false);
         if (err) {
-          console.error('[HealthKit] iOS Error:', err);
+          // 🌟 修正: iOSは今日のデータがまだ0件の場合にエラーを返すことがあるため、0歩として扱う
+          console.log('[HealthKit] iOS Steps no data or error:', err);
+          setDailySteps(0);
           return;
         }
         console.log('[HealthKit] iOS Steps:', results.value);
@@ -63,12 +68,7 @@ export const useHealthKit = () => {
         const tomorrow = new Date(today);
         tomorrow.setDate(today.getDate() + 1);
 
-        console.log(`[HealthKit] Android: Fetching range ${today.toISOString()} - ${tomorrow.toISOString()}`);
-
-        // ★修正: 権限確認をここでも念のため行う
         const granted = await getGrantedPermissions();
-        console.log('[HealthKit] Android: Current Granted Permissions:', JSON.stringify(granted));
-
         if (!granted.some(p => p.recordType === 'Steps')) {
           console.log('[HealthKit] Android: Steps permission missing during fetch.');
           setLoading(false);
@@ -84,8 +84,6 @@ export const useHealthKit = () => {
         });
 
         const totalSteps = result.records.reduce((sum, record) => sum + record.count, 0);
-        console.log(`[HealthKit] Android: Total Steps Fetched: ${totalSteps} (Records: ${result.records.length})`);
-
         setDailySteps(totalSteps);
       } catch (err) {
         console.error('[HealthKit] Android Fetch Error:', err);
@@ -95,7 +93,7 @@ export const useHealthKit = () => {
     }
   }, [isAvailable]);
 
-  // ▼ 安全な初期化チェック関数
+  // ▼ 安全な初期化チェック関数 (Android専用)
   const checkAndroidInitialization = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return false;
 
@@ -129,51 +127,55 @@ export const useHealthKit = () => {
   // ▼ 権限をリクエストする関数（ボタン押下時に実行）
   const requestAccess = async () => {
     console.log('[HealthKit] requestAccess called');
-    if (Platform.OS !== 'android') return;
-    if (requesting) {
-      console.log('[HealthKit] Already requesting. Ignored.');
+    if (requesting) return;
+
+    setRequesting(true);
+
+    // 🌟 修正: iOSの場合の明示的な権限リクエスト処理
+    if (Platform.OS === 'ios') {
+      AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
+        setRequesting(false);
+        if (!error) {
+          console.log('[HealthKit] iOS Permission success');
+          setIsAvailable(true);
+          fetchSteps();
+          Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
+        } else {
+          console.error('[HealthKit] iOS Init Error:', error);
+          Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
+        }
+      });
       return;
     }
 
-    setRequesting(true);
-    try {
-      // 1. 初期化チェック
-      const canProceed = await checkAndroidInitialization();
-      if (!canProceed) {
-        console.log('[HealthKit] Initialization failed. Aborting request.');
-        Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.initFailed'));
-        return;
+    // Androidの場合の処理
+    if (Platform.OS === 'android') {
+      try {
+        const canProceed = await checkAndroidInitialization();
+        if (!canProceed) {
+          Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.initFailed'));
+          return;
+        }
+
+        const permissions: Permission[] = [{ accessType: 'read', recordType: 'Steps' }];
+        await requestPermission(permissions);
+
+        const granted = await getGrantedPermissions();
+        const hasPermission = granted.some(p => p.recordType === 'Steps');
+
+        if (hasPermission) {
+          setIsAvailable(true);
+          await fetchSteps();
+          Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
+        } else {
+          Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
+        }
+      } catch (e) {
+        console.error("[HealthKit] Request Access Error:", e);
+        Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.errorMessage'));
+      } finally {
+        setRequesting(false);
       }
-
-      // 2. 権限リクエスト
-      const permissions: Permission[] = [{ accessType: 'read', recordType: 'Steps' }];
-      console.log('[HealthKit] Requesting permissions:', JSON.stringify(permissions));
-
-      // requestPermissionは権限ダイアログの結果を返さないため、awaitで待つのみ
-      await requestPermission(permissions);
-      console.log('[HealthKit] Permission dialog closed');
-
-      // 3. 結果確認
-      const granted = await getGrantedPermissions();
-      console.log('[HealthKit] Granted Permissions after request:', JSON.stringify(granted));
-
-      const hasPermission = granted.some(p => p.recordType === 'Steps');
-
-      if (hasPermission) {
-        console.log('[HealthKit] Permission granted! Fetching steps...');
-        setIsAvailable(true);
-        // 権限取得直後にデータを取得
-        await fetchSteps();
-        Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
-      } else {
-        console.log('[HealthKit] Permission denied or cancelled.');
-        Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
-      }
-    } catch (e) {
-      console.error("[HealthKit] Request Access Error:", e);
-      Alert.alert(i18n.t('healthkit.error'), i18n.t('healthkit.errorMessage'));
-    } finally {
-      setRequesting(false);
     }
   };
 
@@ -190,7 +192,6 @@ export const useHealthKit = () => {
           }
         });
       } else if (Platform.OS === 'android') {
-        // Androidは起動時に勝手に権限リクエストを出さないのがマナー
         try {
           const canProceed = await checkAndroidInitialization();
           if (canProceed) {

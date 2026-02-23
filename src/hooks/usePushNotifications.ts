@@ -6,7 +6,6 @@ import { Platform } from 'react-native';
 import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from '../i18n';
 
 Notifications.setNotificationHandler({
@@ -18,9 +17,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// ★重要修正: 「処理中」かどうかを判定するメモリ上のロック変数
-// ファイルの外に置くことで、アプリ全体で共有されます。
+// 重複実行を防ぐメモリ上のロック変数
 let isProcessing = false;
+
+// 🌟 今回の要：リマインダー通知に「唯一無二の固定ID」を付与します
+const REMINDER_NOTIFICATION_ID = 'woma-daily-reminder-2100';
 
 export const usePushNotifications = (userId?: string, shouldRegister: boolean = false) => {
   const router = useRouter();
@@ -38,7 +39,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         saveTokenToFirestore(userId, token);
       }
 
-      // デイリーリマインダーの設定試行
+      // デイリーリマインダーの自動修復・設定プロセスを開始
       scheduleDailyReminder();
     });
 
@@ -71,32 +72,47 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   };
 
   const scheduleDailyReminder = async () => {
-    // ★ロック処理1: メモリ上での即時チェック
-    // すでに誰かが処理を開始していたら、問答無用で帰らせる
-    if (isProcessing) {
-      return;
-    }
-
-    // 処理中フラグを立てて、他の呼び出しをブロックする
+    // 複数コンポーネントからの同時呼び出しをブロック
+    if (isProcessing) return;
     isProcessing = true;
 
     try {
-      const today = new Date().toDateString(); // "Mon Feb 16 2026"
-      const STORAGE_KEY = 'WOMA_LAST_REMINDER_SET_DATE';
-
-      // ★ロック処理2: ディスク上での永続チェック
-      const lastSetDate = await AsyncStorage.getItem(STORAGE_KEY);
-
-      // 今日すでに完了していれば終了
-      if (lastSetDate === today) {
-        // console.log("Already scheduled for today (AsyncStorage check).");
+      // 1. 通知の権限があるか確認（権限がなければスケジュールできないので安全に終了）
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
         return;
       }
 
-      // --- 設定処理 ---
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      // 2. 現在OSにスケジュールされているすべての通知を取得
+      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
 
+      // 3. すでに私たちが定義した「固定ID」のリマインダーが存在するか確認
+      const hasCorrectReminder = scheduledNotifications.some(
+        (notif) => notif.identifier === REMINDER_NOTIFICATION_ID
+      );
+
+      // 4. 過去のバグで「固定IDではないがリマインダーとして登録されてしまった」ゴミ通知を探す
+      const obsoleteReminders = scheduledNotifications.filter(
+        (notif) => notif.content.data?.type === 'reminder' && notif.identifier !== REMINDER_NOTIFICATION_ID
+      );
+
+      // 5. ゴミ通知があれば、それを個別に削除（自動お掃除機能）
+      // ※ 他の正常な通知（DMなど）は一切消えません
+      if (obsoleteReminders.length > 0) {
+        for (const notif of obsoleteReminders) {
+          await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+        }
+        console.log(`Cleaned up ${obsoleteReminders.length} obsolete reminder(s).`);
+      }
+
+      // 6. 正しい固定IDのリマインダーがすでに登録されていれば、何もしない（完璧な状態）
+      if (hasCorrectReminder) {
+        return;
+      }
+
+      // 7. まだ登録されていない場合、固定IDを指定して新規登録（永久ループ）
       await Notifications.scheduleNotificationAsync({
+        identifier: REMINDER_NOTIFICATION_ID, // ← ★ここで固定IDをOSに登録
         content: {
           title: i18n.t('pushNotification.reminderTitle'),
           body: i18n.t('pushNotification.reminderBody'),
@@ -106,22 +122,17 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         trigger: {
           hour: 21,
           minute: 0,
-          repeats: true,
+          repeats: true, // 毎日繰り返す
         },
       });
 
-      // 設定完了を保存
-      await AsyncStorage.setItem(STORAGE_KEY, today);
-
-      console.log("Daily reminder scheduled successfully. (Saved to Storage)");
+      console.log("Daily reminder perfectly scheduled for 21:00 with fixed ID.");
 
     } catch (error) {
       console.log("Error scheduling reminder:", error);
-      // エラーが出た場合はロックを解除して再試行できるようにしても良いが、
-      // 無限ループ防止のため、基本的には解除しなくてOK（次回起動時に再トライ）
     } finally {
-      // ※ここではあえて isProcessing = false に戻しません。
-      // なぜなら、「1回成功したら、アプリを落とすまで二度と呼ばなくていい」からです。
+      // 処理完了後にロック解除。次回以降は hasCorrectReminder が true になるので安全。
+      isProcessing = false;
     }
   };
 

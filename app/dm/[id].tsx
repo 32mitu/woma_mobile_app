@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { GiftedChat, Actions } from 'react-native-gifted-chat';
 import * as ImagePicker from 'expo-image-picker';
@@ -52,7 +52,6 @@ export default function ChatRoomScreen() {
   useEffect(() => {
     navigation.setOptions({
       title: partnerName,
-      // ヘッダー右上のメニューボタンをIconButtonに置き換え
       headerRight: () => (
         <IconButton
           name="ellipsis-horizontal"
@@ -139,7 +138,6 @@ export default function ChatRoomScreen() {
   }, [userProfile, sendImage]);
 
   const renderActions = useCallback((props: any) => {
-    // GiftedChatのActionsコンポーネントの代わりに、IconButtonを配置して見た目を統一
     return (
       <View style={styles.actionContainer}>
         <IconButton
@@ -159,11 +157,13 @@ export default function ChatRoomScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-        keyboardVerticalOffset={headerHeight}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 160}
+        enabled={true}
       >
         <GiftedChat
           messages={messages}
@@ -175,11 +175,12 @@ export default function ChatRoomScreen() {
           placeholder={t('dm.placeholder')}
           textInputProps={{ style: styles.textInput }}
           isKeyboardInternallyHandled={false}
-          keyboardShouldPersistTaps="never"
-          bottomOffset={insets.bottom}
+          keyboardShouldPersistTaps="handled"
+
+          bottomOffset={Platform.OS === 'ios' ? insets.bottom : 0}
         />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
