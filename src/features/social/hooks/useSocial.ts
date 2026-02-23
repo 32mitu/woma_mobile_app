@@ -26,9 +26,8 @@ export const useSocial = () => {
         followingId: targetUserId,
         createdAt: serverTimestamp(),
       });
-      console.log(`Followed ${targetUserId}`);
     } catch (error) {
-      console.error("Follow error:", error);
+      console.error('Follow error:', error);
       alert(t('social.followFailed'));
     } finally {
       setLoading(false);
@@ -42,9 +41,8 @@ export const useSocial = () => {
       const docId = `${userProfile.uid}_${targetUserId}`;
       const followRef = doc(db, COLLECTION_NAME, docId);
       await deleteDoc(followRef);
-      console.log(`Unfollowed ${targetUserId}`);
     } catch (error) {
-      console.error("Unfollow error:", error);
+      console.error('Unfollow error:', error);
       alert(t('social.unfollowFailed'));
     } finally {
       setLoading(false);

@@ -4,6 +4,7 @@ import { BarChart } from "react-native-gifted-charts";
 import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '../../../../firebaseConfig';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 // 共通コンポーネント
 import { Card } from '../../../ui/Card';
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [barData, setBarData] = useState<any[]>([]);
   const [lineData, setLineData] = useState<any[]>([]);
@@ -207,10 +209,10 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
           {currentDate.getMonth() + 1}/{index + 1}
         </Text>
         <Text style={styles.tooltipText}>
-          カロリー: {Math.round(item.value)} kcal
+          {t('chart.caloriesLabel', { kcal: Math.round(item.value) })}
         </Text>
         <Text style={styles.tooltipText}>
-          体重: {rawWeights[index] ? `${rawWeights[index]} kg` : '--'}
+          {t('chart.weightLabel', { kg: rawWeights[index] ? rawWeights[index] : t('chart.noWeight') })}
         </Text>
       </View>
     );
@@ -230,7 +232,7 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
           color="#3B82F6"
         />
         <Text style={styles.monthTitle}>
-          {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月
+          {t('chart.yearMonth', { year: currentDate.getFullYear(), month: currentDate.getMonth() + 1 })}
         </Text>
         <IconButton
           name="chevron-forward"
@@ -242,8 +244,8 @@ export const HealthChart = ({ userId, userWeight, refreshTrigger }: Props) => {
 
       {/* 軸タイトル */}
       <View style={styles.axisTitleContainer}>
-        <Text style={styles.leftAxisTitle}>消費カロリー (kcal)</Text>
-        <Text style={styles.rightAxisTitle}>体重 (kg)</Text>
+        <Text style={styles.leftAxisTitle}>{t('chart.caloriesBurned')}</Text>
+        <Text style={styles.rightAxisTitle}>{t('chart.weightKg')}</Text>
       </View>
 
       {loading ? (

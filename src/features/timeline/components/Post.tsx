@@ -135,11 +135,12 @@ const PostComponent = ({ post }: PostProps) => {
       await updateDoc(postRef, {
         [`reactions.${currentUser.uid}`]: isRemoving ? deleteField() : type
       });
-      // 通知ロジック (省略せず実装)
+      // 通知ロジック
       if (!isRemoving && targetUid && targetUid !== currentUser.uid && (!previousReactions[currentUser.uid] || previousReactions[currentUser.uid] !== type)) {
         await sendPushNotification(targetUid, t('notification.reactionTitle'), `${userInfo?.displayName || t('notification.someone')}${reactionEmojis[type]}`);
       }
     } catch (error) {
+      console.error('[Like] Firestore update FAILED:', error);
       setLocalReactions(previousReactions);
     }
   };
@@ -223,7 +224,7 @@ const PostComponent = ({ post }: PostProps) => {
           {post.activities.map((act, idx) => (
             <Badge
               key={idx}
-              label={`${act.name} ${act.duration}分`}
+              label={`${act.name} ${t('activityLog.minutes', { count: act.duration })}`}
               variant="default"
               color="primary"
               size="sm"

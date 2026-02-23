@@ -65,10 +65,15 @@ export default function LoginScreen() {
   };
 
   // 言語選択ハンドラ
-  const selectLanguage = (lang: 'ja' | 'en') => {
-    setLanguage(lang);
-    i18n.changeLanguage(lang);
-    setShowLangMenu(false); // 選択後にメニューを閉じる
+  const selectLanguage = async (lang: 'ja' | 'en') => {
+    setShowLangMenu(false); // 選択後にまずメニューを閉じる
+    try {
+      await i18n.changeLanguage(lang); // 翻訳エンジンを切り替え
+      setLanguage(lang); // Zustand(UI)の状態を更新
+    } catch (error) {
+      console.error('言語変更エラー:', error);
+      Alert.alert(t('common.error'), "言語の切り替えに失敗しました");
+    }
   };
 
   // フォーム送信ハンドラ (ログイン・登録共通)
@@ -200,7 +205,8 @@ export default function LoginScreen() {
               <Text style={styles.subtitle}>{t('auth.subtitle')}</Text>
             </View>
 
-            <View style={styles.formContainer}>
+            {/* ★超重要: key={language} を付与することで、言語変更時にフォーム全体を強制的に再描画させる */}
+            <View style={styles.formContainer} key={language}>
               {!isLoginMode && (
                 <Controller
                   control={control}
@@ -316,7 +322,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
 
-  // 右上の言語切り替えドロップダウン関連のスタイル
   topBar: {
     width: '100%',
     flexDirection: 'row',
@@ -324,7 +329,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 8,
-    zIndex: 100, // ドロップダウンが他の要素の下に隠れないようにする
+    zIndex: 100,
   },
   dropdownContainer: {
     position: 'relative',
@@ -347,7 +352,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     position: 'absolute',
-    top: 44, // ボタンのすぐ下に配置
+    top: 44,
     right: 0,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -357,7 +362,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 8, // Android用の影
+    elevation: 8,
     borderWidth: 1,
     borderColor: '#F3F4F6',
   },

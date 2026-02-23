@@ -18,16 +18,18 @@ export const useTimeline = (groupId?: string) => {
 
   const { userProfile } = useAuth();
   const blockedUsersRef = useRef<string[]>([]);
+  const userUid = userProfile?.uid;
+  const blockedUsers = userProfile?.blockedUsers;
 
   useEffect(() => {
-    if (userProfile?.blockedUsers) {
-      blockedUsersRef.current = userProfile.blockedUsers;
+    if (blockedUsers) {
+      blockedUsersRef.current = blockedUsers;
     }
-  }, [userProfile?.blockedUsers]);
+  }, [blockedUsers]);
 
   const fetchPosts = useCallback(async (isRefresh: boolean = false, startAfterDoc: QueryDocumentSnapshot<DocumentData> | null = null) => {
     try {
-      if (!userProfile) return;
+      if (!userUid) return;
 
       let q;
       const constraints: any[] = [orderBy("createdAt", "desc"), limit(POSTS_PER_PAGE)];
@@ -97,13 +99,15 @@ export const useTimeline = (groupId?: string) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userProfile, groupId]);
+    // blockedUsers は配列なので deps に入れると毎回再生成される。ref で読む。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userUid, groupId]);
 
   useEffect(() => {
-    if (userProfile) {
+    if (userUid) {
       fetchPosts(true);
     }
-  }, [fetchPosts, userProfile]);
+  }, [fetchPosts, userUid]);
 
   const refresh = async () => {
     setRefreshing(true);

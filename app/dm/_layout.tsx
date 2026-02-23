@@ -1,15 +1,17 @@
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { LogBox } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 export default function DMLayout() {
-  
+  const { t } = useTranslation();
+
   // ★追加: ライブラリ起因の特定のエラーログを無視する設定
   useEffect(() => {
     LogBox.ignoreLogs([
       'A props object containing a "key" prop is being spread into JSX',
     ]);
-    
+
     // 念のためコンソールエラーも抑制（念入りな対策）
     const originalConsoleError = console.error;
     console.error = (...args) => {
@@ -23,21 +25,21 @@ export default function DMLayout() {
   return (
     <Stack>
       {/* メッセージ一覧 (app/dm/index.tsx) */}
-      <Stack.Screen 
-        name="index" 
-        options={{ 
-          title: 'メッセージ',
-          headerBackTitle: '戻る'
-        }} 
+      <Stack.Screen
+        name="index"
+        options={{
+          title: t('dm.messages'),
+          headerBackTitle: t('accessibility.back')
+        }}
       />
-      
+
       {/* チャット詳細 (app/dm/[id].tsx) */}
-      <Stack.Screen 
-        name="[id]" 
-        options={{ 
-          title: 'チャット', 
-          headerBackTitle: '一覧' 
-        }} 
+      <Stack.Screen
+        name="[id]"
+        options={{
+          title: t('dm.chat'),
+          headerBackTitle: t('dm.list')
+        }}
       />
     </Stack>
   );

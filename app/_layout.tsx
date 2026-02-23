@@ -1,18 +1,25 @@
 import 'react-native-get-random-values';
 import '../src/i18n'; // 1. ★重要: 翻訳設定の読み込み
+import i18n from '../src/i18n'; // ★追加: i18nの本体をインポート
 import '../global.css'; // Tailwind CSSなどのスタイル適用
 
 import { Stack } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { LogBox } from 'react-native';
 import Toast from 'react-native-toast-message'; // 追加: トースト通知
 import { GlobalErrorBoundary } from '../src/ui/GlobalErrorBoundary'; // 追加: エラーハンドリング
+import * as SplashScreen from 'expo-splash-screen'; // ★追加: スプラッシュスクリーンの制御
 
 import { useAuth } from '../src/features/auth/useAuth';
 import { usePushNotifications } from '../src/hooks/usePushNotifications';
+import { I18nextProvider } from 'react-i18next'; // ★追加: Providerをインポート
+import { useUiStore } from '../src/store/uiStore';
 
 // 開発中の不要なログを無視する場合（任意）
 LogBox.ignoreLogs(['@firebase/auth']);
+
+// データの準備ができるまでスプラッシュスクリーンを自動で隠さない
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   // 認証状態の監視（初期化のため呼び出し）
@@ -21,11 +28,29 @@ export default function RootLayout() {
   // プッシュ通知設定用のフック
   const { registerForPushNotificationsAsync, scheduleDailyReminder } = usePushNotifications();
 
+  // Zustand ストアから状態を取得
+  const { language, _hasHydrated } = useUiStore();
+  const [isI18nReady, setIsI18nReady] = useState(false); // i18nの準備状態を管理
+
+  // Zustandのストレージ読み込みと言語の同期を確実に行う
   useEffect(() => {
-    console.log("🚀 [RootLayout] アプリが起動しました");
+
+    const initLanguage = async () => {
+      if (_hasHydrated) {
+        if (language && i18n.language !== language) {
+          console.log(`⏳ [RootLayout] i18nの言語をZustandの保存データに同期させます: ${language}`);
+          await i18n.changeLanguage(language); // 言語の切り替えを完全に待つ
+        }
+        setIsI18nReady(true);
+        SplashScreen.hideAsync(); // 完全に準備ができてからスプラッシュを消す
+      }
+    };
+    initLanguage();
+  }, [_hasHydrated, language]);
+
+  useEffect(() => {
 
     const setup = async () => {
-      // 2. ★ここで通知設定を実行
       await registerForPushNotificationsAsync();
       await scheduleDailyReminder();
     };
@@ -33,27 +58,35 @@ export default function RootLayout() {
 
   }, []);
 
+  // データの準備が完全に終わるまでは画面を描画しない
+  if (!_hasHydrated || !isI18nReady) {
+    return null;
+  }
+
   return (
-    // 3. アプリ全体を GlobalErrorBoundary で囲むことで、クラッシュ時に赤い画面ではなくカスタム画面を表示
+    // アプリ全体を GlobalErrorBoundary で囲む
     <GlobalErrorBoundary>
-      <Stack screenOptions={{ headerShown: false }}>
-        {/* ログイン・登録画面 (index) */}
-        <Stack.Screen name="index" />
+      {/* アプリ全体を I18nextProvider で囲み、言語の変更を「すべての画面」に行き渡らせる */}
+      <I18nextProvider i18n={i18n}>
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* ログイン・登録画面 (index) */}
+          <Stack.Screen name="index" />
 
-        {/* タブ画面 (メイン) */}
-        <Stack.Screen name="(tabs)" />
+          {/* タブ画面 (メイン) */}
+          <Stack.Screen name="(tabs)" />
 
-        {/* 各種詳細画面 */}
-        <Stack.Screen name="search" />
-        <Stack.Screen name="public/[uid]" />
-        <Stack.Screen name="dm" />
-        <Stack.Screen name="friends" />
-        <Stack.Screen name="groups" />
-        <Stack.Screen name="profile" />
-      </Stack>
+          {/* 各種詳細画面 */}
+          <Stack.Screen name="search" />
+          <Stack.Screen name="public/[uid]" />
+          <Stack.Screen name="dm" />
+          <Stack.Screen name="friends" />
+          <Stack.Screen name="groups" />
+          <Stack.Screen name="profile" />
+        </Stack>
 
-      {/* 4. Toast コンポーネントを最下部に配置 (全画面の上に表示させるため) */}
-      <Toast />
+        {/* Toast コンポーネントを最下部に配置 */}
+        <Toast />
+      </I18nextProvider>
     </GlobalErrorBoundary>
   );
 }

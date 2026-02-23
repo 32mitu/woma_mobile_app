@@ -101,7 +101,6 @@ export const useHealthKit = () => {
 
     try {
       const status = await getSdkStatus();
-      console.log('[HealthKit] Android SDK Status:', status);
 
       if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE) {
         Alert.alert(i18n.t('healthkit.notSupported'), i18n.t('healthkit.notSupportedMessage'));
@@ -120,7 +119,6 @@ export const useHealthKit = () => {
       }
 
       const isInitialized = await initialize();
-      console.log('[HealthKit] Android Initialized:', isInitialized);
       return isInitialized;
     } catch (e) {
       console.error("[HealthKit] Android Initialization Check Error:", e);
@@ -182,7 +180,6 @@ export const useHealthKit = () => {
   // ▼ 初回ロード時チェック
   useEffect(() => {
     const init = async () => {
-      console.log('[HealthKit] Mount: Initial check started');
       if (Platform.OS === 'ios') {
         AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
           if (!error) {
@@ -198,7 +195,6 @@ export const useHealthKit = () => {
           const canProceed = await checkAndroidInitialization();
           if (canProceed) {
             const granted = await getGrantedPermissions();
-            console.log('[HealthKit] Auto-check Granted:', JSON.stringify(granted));
             const hasPermission = granted.some(p => p.recordType === 'Steps');
             if (hasPermission) {
               setIsAvailable(true);
