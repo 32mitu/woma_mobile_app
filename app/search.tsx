@@ -4,7 +4,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, limit, where, orderBy, startAt, endAt } from 'firebase/firestore';
+import { collection, getDocs, query, limit, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserList } from '../src/features/social/components/UserList';
 import { Post } from '../src/features/timeline/components/Post';
@@ -45,13 +45,23 @@ export default function SearchScreen() {
       const text = searchText.trim();
 
       if (activeTab === 'user') {
+        // クライアント側でフィルタリング：
+        // Firestoreは部分一致・大文字小文字無視の検索が不得意なため、
+        // 全ユーザーを取得してJS側でフィルタリングする
         q = query(
           collection(db, 'users'),
-          orderBy('username'),
-          startAt(text),
-          endAt(text + '\uf8ff'),
-          limit(20)
+          limit(500)
         );
+        const snapshot = await getDocs(q);
+        const lowerText = text.toLowerCase();
+        const data = snapshot.docs
+          .map(doc => ({ uid: doc.id, id: doc.id, ...doc.data() }))
+          .filter((user: any) => {
+            const username = (user.username || '').toLowerCase();
+            const displayName = (user.displayName || '').toLowerCase();
+            return username.includes(lowerText) || displayName.includes(lowerText);
+          });
+        setResults(data);
       } else {
         q = query(
           collection(db, 'timeline'),
@@ -59,11 +69,10 @@ export default function SearchScreen() {
           where('text', '<=', `#${text}` + '\uf8ff'),
           limit(20)
         );
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setResults(data);
       }
-
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setResults(data);
     } catch (e) {
       console.error(e);
     } finally {

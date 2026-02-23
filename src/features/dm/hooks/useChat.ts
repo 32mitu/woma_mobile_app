@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../../firebaseConfig';
 import { IMessage } from 'react-native-gifted-chat';
 import { compressImage } from '../../../utils/imageCompressor'; // ★追加: 画像圧縮ユーティリティ
+import i18n from '../../../i18n';
 
 export const useChat = (currentUserId?: string, partnerUserId?: string) => {
   const [messages, setMessages] = useState<IMessage[]>([]);
@@ -95,7 +96,7 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
 
       // ルーム情報の更新（一覧表示用）
       let lastMsgText = text;
-      if (!text && downloadUrl) lastMsgText = '📷 画像を送信しました';
+      if (!text && downloadUrl) lastMsgText = i18n.t('dm.imagesSent');
 
       const roomRef = doc(db, 'chatRooms', roomId);
 

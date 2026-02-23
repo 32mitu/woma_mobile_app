@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ListItem } from '../../src/ui/ListItem';
 import { Avatar } from '../../src/ui/Avatar';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../src/i18n';
 
 export default function ChatListScreen() {
   const router = useRouter();
@@ -81,11 +82,15 @@ export default function ChatListScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const timeAgo = getTimeString(item.updatedAt);
+    // 既存データ（日本語の画像送信メッセージ）も含め、📷 を含む場合は翻訳キーを使用
+    const subtitleText = !item.lastMessage || item.lastMessage.includes('📷')
+      ? t('dm.imagesSent')
+      : item.lastMessage;
 
     return (
       <ListItem
         title={item.partnerName}
-        subtitle={item.lastMessage || t('dm.imagesSent')}
+        subtitle={subtitleText}
         leftElement={
           <Avatar
             uri={item.partnerAvatar}
@@ -142,7 +147,7 @@ function getTimeString(date: Date) {
   if (diff < day) {
     return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
   } else if (diff < 7 * day) {
-    return `${Math.floor(diff / day)}日前`;
+    return i18n.t('dm.daysAgo', { count: Math.floor(diff / day) });
   } else {
     return `${date.getMonth() + 1}/${date.getDate()}`;
   }

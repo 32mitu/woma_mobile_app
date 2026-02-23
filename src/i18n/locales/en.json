@@ -347,6 +347,12 @@
         "minutes": "{{count}} min",
         "steps": "{{count}} steps"
     },
+    "timeAgo": {
+        "secondsAgo": "{{count}}s ago",
+        "minutesAgo": "{{count}}m ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}}d ago"
+    },
     "barcode": {
         "scanTitle": "Scan Barcode",
         "scanning": "Scanning...",
@@ -386,7 +392,8 @@
         "sendImageConfirm": "Send this image?",
         "sendImagesConfirm": "Send {{count}} images?",
         "sendImageFailed": "Failed to send image",
-        "reportReason": "Inappropriate DM"
+        "reportReason": "Inappropriate DM",
+        "daysAgo": "{{count}}d ago"
     },
     "search": {
         "userTab": "Users",
@@ -420,7 +427,9 @@
         "carbsGoal": "Goal: 50-65%",
         "adviceHighFat": "⚠️ Fat is high. Try to cut back on fried foods.",
         "adviceLowProtein": "💡 Protein is low. Add more meat or fish!",
-        "adviceGood": "✨ Great balance!"
+        "adviceGood": "✨ Great balance!",
+        "caloriesBurned": "Calories Burned (kcal)",
+        "weightKg": "Weight (kg)"
     },
     "healthkit": {
         "notSupported": "Not Supported",

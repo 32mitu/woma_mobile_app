@@ -97,7 +97,8 @@
         "badgeEarnedMessage": "おめでとうございます！\n以下のバッジを獲得しました：\n\n{{badges}}",
         "saving": "保存中...",
         "exercise": "🏃 運動",
-        "meal": "🍙 食事"
+        "meal": "🍙 食事",
+        "weight": "体重"
     },
     "exercise": {
         "selectExercise": "運動を選択",
@@ -420,7 +421,9 @@
         "carbsGoal": "目標: 50-65%",
         "adviceHighFat": "⚠️ 脂質が多めです。揚げ物を控えめにしてみましょう。",
         "adviceLowProtein": "💡 たんぱく質が少なめです。肉や魚を増やしましょう！",
-        "adviceGood": "✨ バランスが良いです！"
+        "adviceGood": "✨ バランスが良いです！",
+        "caloriesBurned": "消費カロリー (kcal)",
+        "weightKg": "体重 (kg)"
     },
     "healthkit": {
         "notSupported": "非対応",
@@ -455,5 +458,11 @@
     "errorBoundary": {
         "title": "エラーが発生しました",
         "reload": "アプリを再起動"
+    },
+    "timeAgo": {
+        "secondsAgo": "{{count}}秒前",
+        "minutesAgo": "{{count}}分前",
+        "hoursAgo": "{{count}}時間前",
+        "daysAgo": "{{count}}日前"
     }
 }

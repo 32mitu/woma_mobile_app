@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import { useRouter } from 'expo-router';
+import i18n from '../../../i18n';
 
 /**
  * 経過時間を計算する (Web版と同ロジック)
@@ -12,10 +13,11 @@ export const timeAgo = (date: any) => {
   const now = new Date();
   const diff = Math.floor((now.getTime() - targetDate.getTime()) / 1000);
 
-  if (diff < 60) return `${diff}秒前`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
-  return `${Math.floor(diff / 86400)}日前`;
+  const t = i18n.t.bind(i18n);
+  if (diff < 60) return t('timeAgo.secondsAgo', { count: diff });
+  if (diff < 3600) return t('timeAgo.minutesAgo', { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t('timeAgo.hoursAgo', { count: Math.floor(diff / 3600) });
+  return t('timeAgo.daysAgo', { count: Math.floor(diff / 86400) });
 };
 
 /**

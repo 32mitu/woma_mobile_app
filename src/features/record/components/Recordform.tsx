@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ExerciseForm } from './Exercise/ExerciseForm'; // 新規作成したファイルをインポート
 import { MealForm } from './Meal/MealForm';         // 新規作成したファイルをインポート
+import { useTranslation } from 'react-i18next';
 
 // --------------------------------------------------
 // モード切り替えタブコンポーネント
@@ -12,34 +13,37 @@ const SegmentedControl = ({
 }: {
   value: 'exercise' | 'meal';
   onChange: (v: 'exercise' | 'meal') => void
-}) => (
-  <View style={styles.tabContainer}>
-    <TouchableOpacity
-      style={[
-        styles.tabButton,
-        value === 'exercise' && styles.activeTab
-      ]}
-      onPress={() => onChange('exercise')}
-    >
-      <Text style={[
-        styles.tabText,
-        value === 'exercise' ? styles.activeTabText : styles.inactiveTabText
-      ]}>🏃 運動</Text>
-    </TouchableOpacity>
-    <TouchableOpacity
-      style={[
-        styles.tabButton,
-        value === 'meal' && styles.activeTab
-      ]}
-      onPress={() => onChange('meal')}
-    >
-      <Text style={[
-        styles.tabText,
-        value === 'meal' ? styles.activeMealText : styles.inactiveTabText
-      ]}>🍙 食事</Text>
-    </TouchableOpacity>
-  </View>
-);
+}) => {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.tabContainer}>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          value === 'exercise' && styles.activeTab
+        ]}
+        onPress={() => onChange('exercise')}
+      >
+        <Text style={[
+          styles.tabText,
+          value === 'exercise' ? styles.activeTabText : styles.inactiveTabText
+        ]}>{t('record.exercise')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.tabButton,
+          value === 'meal' && styles.activeTab
+        ]}
+        onPress={() => onChange('meal')}
+      >
+        <Text style={[
+          styles.tabText,
+          value === 'meal' ? styles.activeMealText : styles.inactiveTabText
+        ]}>{t('record.meal')}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 // --------------------------------------------------
 // メインコンテナ
