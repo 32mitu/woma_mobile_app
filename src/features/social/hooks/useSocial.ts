@@ -6,6 +6,8 @@ import {
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
 import { useTranslation } from 'react-i18next';
+// ★追加: プッシュ通知用のフックをインポート
+import { usePushNotifications } from '../../../hooks/usePushNotifications';
 
 const COLLECTION_NAME = 'follows';
 
@@ -14,6 +16,9 @@ export const useSocial = () => {
   const { userProfile } = useAuth();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+
+  // ★追加: 通知送信用の関数を取得
+  const { sendPushNotification } = usePushNotifications();
 
   const followUser = async (targetUserId: string) => {
     if (!userProfile?.uid || !targetUserId) return;
@@ -26,6 +31,16 @@ export const useSocial = () => {
         followingId: targetUserId,
         createdAt: serverTimestamp(),
       });
+
+      // ★追加: フォロー成功時に、相手に即時プッシュ通知を送信する
+      const userName = userProfile.username || userProfile.displayName || t('timeline.noName', { defaultValue: '名無し' });
+      await sendPushNotification(
+        targetUserId,
+        t('notification.newFollowerTitle', { defaultValue: '新しいフォロワー' }),
+        t('notification.newFollowerBody', { name: userName, defaultValue: `${userName}さんにフォローされました！` }),
+        { url: `/public/${userProfile.uid}` } // 通知タップ時に自分のプロフィール画面へ飛ぶように設定
+      );
+
     } catch (error) {
       console.error('Follow error:', error);
       alert(t('social.followFailed'));

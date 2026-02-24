@@ -1,5 +1,5 @@
-import React, { useState, useEffect, memo, useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Alert, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, Alert, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { doc, updateDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from '../../../../firebaseConfig';
@@ -20,6 +20,8 @@ import { IconButton } from '../../../ui/IconButton';
 import { Badge } from '../../../ui/Badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// カードの左右マージン(16 * 2)を引いて、画像1枚あたりの幅を計算
+const CARD_WIDTH = SCREEN_WIDTH - 32;
 
 type PostData = {
   id: string;
@@ -65,6 +67,9 @@ const PostComponent = ({ post }: PostProps) => {
   const [showReactionPalette, setShowReactionPalette] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
+  // ★ 追加: 画像スワイプ用の現在位置インデックス
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
   // ユーザー情報の初期化
   const [userInfo, setUserInfo] = useState<{ displayName: string; photoURL: string } | null>(() => {
     if (post.username || post.userIcon) {
@@ -79,6 +84,11 @@ const PostComponent = ({ post }: PostProps) => {
   const currentUser = auth.currentUser;
   const targetUid = post.userId || post.uid;
   const isOwner = currentUser && targetUid === currentUser.uid;
+
+  // FlashList等でコンポーネントが再利用された際に、画像のスクロール位置を初期化する
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [post.id]);
 
   // リアクション計算
   const myReaction = useMemo(() => {
@@ -156,8 +166,25 @@ const PostComponent = ({ post }: PostProps) => {
     if (targetUid) router.push({ pathname: '/public/[uid]', params: { uid: targetUid } });
   };
 
+  // ★ スクロール時の位置計算処理
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const slideSize = event.nativeEvent.layoutMeasurement.width;
+    const index = event.nativeEvent.contentOffset.x / slideSize;
+    const roundIndex = Math.round(index);
+    if (roundIndex !== activeImageIndex) {
+      setActiveImageIndex(roundIndex);
+    }
+  }, [activeImageIndex]);
+
   // バッジリストの取得 (互換性対応)
   const badgesToShow = post.displayBadges || post.earnedBadges || [];
+
+  // ★ 画像URLを配列として正規化
+  const imagesToDisplay = post.imageUrls && post.imageUrls.length > 0
+    ? post.imageUrls
+    : post.imageUrl
+      ? [post.imageUrl]
+      : [];
 
   return (
     <Card style={styles.card} padding="none">
@@ -234,22 +261,54 @@ const PostComponent = ({ post }: PostProps) => {
         </View>
       )}
 
-      {/* 画像表示 */}
-      {(post.imageUrls && post.imageUrls.length > 0) || post.imageUrl ? (
+      {/* ★★★ 画像表示 (横スワイプ対応) ★★★ */}
+      {imagesToDisplay.length > 0 && (
         <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: post.imageUrl || (post.imageUrls && post.imageUrls[0]) }}
-            style={styles.postImage}
-            contentFit="cover"
-            transition={200}
-          />
-          {post.imageUrls && post.imageUrls.length > 1 && (
-            <View style={styles.imageCountBadge}>
-              <Text style={styles.imageCountText}>+{post.imageUrls.length - 1}</Text>
-            </View>
+          {imagesToDisplay.length === 1 ? (
+            // 画像が1枚の場合はそのまま表示
+            <Image
+              source={{ uri: imagesToDisplay[0] }}
+              style={styles.postImage}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            // 画像が複数枚ある場合はScrollViewで横スワイプ可能に
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+              >
+                {imagesToDisplay.map((uri, index) => (
+                  <Image
+                    key={index}
+                    source={{ uri }}
+                    style={{ width: CARD_WIDTH, height: '100%' }}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ))}
+              </ScrollView>
+
+              {/* ページネーション (ドット) */}
+              <View style={styles.paginationWrapper}>
+                {imagesToDisplay.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.dot,
+                      activeImageIndex === index ? styles.activeDot : styles.inactiveDot
+                    ]}
+                  />
+                ))}
+              </View>
+            </>
           )}
         </View>
-      ) : null}
+      )}
 
       {/* アクションボタンエリア */}
       <View style={styles.actions}>
@@ -427,19 +486,30 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  imageCountBadge: {
+  // ★ 追加: ページネーション（ドット）用のスタイル
+  paginationWrapper: {
     position: 'absolute',
-    right: 10,
-    bottom: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  imageCountText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  activeDot: {
+    backgroundColor: '#3B82F6',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  inactiveDot: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
   actions: {
     flexDirection: 'row',
