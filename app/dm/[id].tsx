@@ -1,84 +1,81 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, StyleSheet, Alert, TouchableOpacity, Modal, Image } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { GiftedChat, Actions } from 'react-native-gifted-chat';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
-import { useHeaderHeight } from '@react-navigation/elements';
 
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../src/features/auth/useAuth';
 import { useChat } from '../../src/features/dm/hooks/useChat';
 import { useSafety } from '../../src/hooks/useSafety';
 
-// 共通コンポーネント
-import { IconButton } from '../../src/ui/IconButton';
-import { useTranslation } from 'react-i18next';
-
 export default function ChatRoomScreen() {
   const { id } = useLocalSearchParams();
   const partnerId = Array.isArray(id) ? id[0] : id;
   const { userProfile } = useAuth();
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight();
-  const insets = useSafeAreaInsets();
 
   const { messages, onSend, sendImage, markAsRead } = useChat(userProfile?.uid, partnerId);
   const { reportContent, blockUser } = useSafety();
-  const { t } = useTranslation();
 
-  const [partnerName, setPartnerName] = useState(t('dm.chat'));
+  const [partnerName, setPartnerName] = useState('チャット');
+
+  // 画像プレビュー用のステート
+  const [isImageViewVisible, setIsImageViewVisible] = useState(false);
+  const [currentImageUri, setCurrentImageUri] = useState('');
+
+  // 端末のセーフエリア（ノッチなどの余白）を取得
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (partnerId) {
-      const fetchPartner = async () => {
+    const fetchPartnerProfile = async () => {
+      if (partnerId) {
         try {
-          const docRef = doc(db, 'users', partnerId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data();
-            setPartnerName(data.username || data.displayName || t('dm.chat'));
+          const userDoc = await getDoc(doc(db, 'users', partnerId));
+          if (userDoc.exists()) {
+            setPartnerName(userDoc.data().username || '名無しさん');
           }
         } catch (e) {
           console.error(e);
         }
-      };
-      fetchPartner();
-      markAsRead();
-    }
+      }
+    };
+    fetchPartnerProfile();
   }, [partnerId]);
 
   useEffect(() => {
     navigation.setOptions({
       title: partnerName,
       headerRight: () => (
-        <IconButton
-          name="ellipsis-horizontal"
-          size={24}
-          color="#333"
-          onPress={showActionSheet}
-          style={{ padding: 4 }}
-        />
+        <TouchableOpacity onPress={showActionSheet} style={{ padding: 8 }}>
+          <Ionicons name="ellipsis-horizontal" size={24} color="#333" />
+        </TouchableOpacity>
       ),
     });
   }, [navigation, partnerName]);
 
+  useEffect(() => {
+    markAsRead();
+  }, [messages.length]);
+
   const showActionSheet = () => {
     Alert.alert(
-      t('common.menu'),
-      '',
+      'メニュー',
+      '操作を選択してください',
       [
-        { text: t('common.report'), onPress: handleReport, style: 'destructive' },
-        { text: t('common.block'), onPress: handleBlock, style: 'destructive' },
-        { text: t('common.cancel'), style: 'cancel' }
+        { text: 'このユーザーを通報', onPress: handleReport, style: 'destructive' },
+        { text: 'このユーザーをブロック', onPress: handleBlock, style: 'destructive' },
+        { text: 'キャンセル', style: 'cancel' }
       ]
     );
   };
 
   const handleReport = async () => {
     if (!partnerId) return;
-    await reportContent(partnerId, 'user', t('dm.reportReason'));
+    await reportContent(partnerId, 'user', '不適切なDM');
   };
 
   const handleBlock = async () => {
@@ -91,16 +88,14 @@ export default function ChatRoomScreen() {
     if (!userProfile) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(t('common.error'), t('common.cameraRollPermission'));
+      Alert.alert('エラー', '写真へのアクセス許可が必要です');
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      allowsMultipleSelection: true,
-      selectionLimit: 10,
-      quality: 0.5,
+      allowsEditing: true,
+      quality: 0.5, // 圧縮だけはしておくと標準Imageでも少し軽くなります
     });
 
     if (!result.canceled && result.assets.length > 0) {
@@ -109,78 +104,81 @@ export default function ChatRoomScreen() {
         name: userProfile.username,
         avatar: userProfile.profileImageUrl
       };
-
-      const count = result.assets.length;
-      const confirmMessage = count === 1
-        ? t('dm.sendImageConfirm')
-        : t('dm.sendImagesConfirm', { count });
-
-      Alert.alert(
-        t('dm.sendImageTitle'),
-        confirmMessage,
-        [
-          { text: t('common.cancel'), style: "cancel" },
-          {
-            text: t('common.ok'),
-            onPress: async () => {
-              try {
-                const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
-                await Promise.all(sendPromises);
-              } catch (e) {
-                console.error(e);
-                Alert.alert(t('common.error'), t('dm.sendImageFailed'));
-              }
-            }
-          }
-        ]
-      );
+      await sendImage(result.assets[0].uri, user);
     }
   }, [userProfile, sendImage]);
 
   const renderActions = useCallback((props: any) => {
     return (
-      <View style={styles.actionContainer}>
-        <IconButton
-          name="image"
-          size={28}
-          color="#3B82F6"
-          onPress={handlePickImage}
-        />
-      </View>
+      <Actions
+        {...props}
+        containerStyle={styles.actionContainer}
+        icon={() => <Ionicons name="image" size={28} color="#3B82F6" />}
+        onPressActionButton={handlePickImage}
+      />
     );
   }, [handlePickImage]);
 
+  // ▼ 追加：チャット内の画像をカスタマイズ（タップで自作プレビューを開く）
+  const renderMessageImage = useCallback((props: any) => {
+    return (
+      <TouchableOpacity onPress={() => {
+        setCurrentImageUri(props.currentMessage.image);
+        setIsImageViewVisible(true);
+      }}>
+        <Image
+          source={{ uri: props.currentMessage.image }}
+          style={styles.messageImage}
+          resizeMode="cover"
+        />
+      </TouchableOpacity>
+    );
+  }, []);
+
   const currentUser = {
     _id: userProfile?.uid || '',
-    name: userProfile?.username || t('dm.noName'),
+    name: userProfile?.username || '自分',
     avatar: userProfile?.profileImageUrl || undefined,
   };
 
   return (
-    <View style={styles.container}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+      <GiftedChat
+        messages={messages}
+        onSend={messages => onSend(messages)}
+        user={currentUser}
+        renderUsernameOnMessage={false}
+        alwaysShowSend
+        renderActions={renderActions}
+        renderMessageImage={renderMessageImage} // 追加：カスタム画像の描画
+        placeholder="メッセージを入力..."
+        textInputProps={{ style: styles.textInput }}
+      />
 
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 160}
-        enabled={true}
+      {/* ▼ 追加：フルスクリーンの画像プレビューモーダル */}
+      <Modal
+        visible={isImageViewVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsImageViewVisible(false)}
       >
-        <GiftedChat
-          messages={messages}
-          onSend={messages => onSend(messages)}
-          user={currentUser}
-          renderUsernameOnMessage={false}
-          alwaysShowSend
-          renderActions={renderActions}
-          placeholder={t('dm.placeholder')}
-          textInputProps={{ style: styles.textInput }}
-          isKeyboardInternallyHandled={false}
-          keyboardShouldPersistTaps="handled"
+        <View style={styles.modalBackground}>
+          {/* 閉じるボタン（セーフエリアを考慮して配置） */}
+          <TouchableOpacity
+            style={[styles.closeButton, { top: insets.top > 0 ? insets.top + 10 : 30 }]}
+            onPress={() => setIsImageViewVisible(false)}
+          >
+            <Ionicons name="close-circle" size={36} color="white" />
+          </TouchableOpacity>
 
-          bottomOffset={Platform.OS === 'ios' ? insets.bottom : 0}
-        />
-      </KeyboardAvoidingView>
-    </View>
+          <Image
+            source={{ uri: currentImageUri }}
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -204,6 +202,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 0,
-    marginLeft: 4,
-  }
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 13,
+    margin: 3,
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)', // 黒の半透明背景
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 20,
+    zIndex: 10,
+    // top はインラインスタイルで動的に設定しています
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%',
+  },
 });

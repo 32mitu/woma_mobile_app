@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ★ 追加
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import i18n from '../i18n';
@@ -20,104 +21,85 @@ Notifications.setNotificationHandler({
 // 重複実行を防ぐメモリ上のロック変数
 let isProcessing = false;
 
-// 🌟 今回の要：リマインダー通知に「唯一無二の固定ID」を付与します
-const REMINDER_NOTIFICATION_ID = 'woma-daily-reminder-2100';
+// ★ 新しい管理キー（AsyncStorageに保存するフラグの名前）
+const SCHEDULE_FLAG_KEY = 'woma_daily_reminder_scheduled_v3';
 
 export const usePushNotifications = (userId?: string, shouldRegister: boolean = false) => {
   const router = useRouter();
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>('');
   const [notification, setNotification] = useState<Notifications.Notification | undefined>(undefined);
-  const notificationListener = useRef<Notifications.EventSubscription>(null);
-  const responseListener = useRef<Notifications.EventSubscription>(null);
+  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
     if (!shouldRegister) return;
 
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
-      if (userId && token) {
-        saveTokenToFirestore(userId, token);
+      if (token && userId) {
+        // トークンをFirestoreに保存
+        const saveToken = async () => {
+          try {
+            const userRef = doc(db, 'users', userId);
+            await updateDoc(userRef, {
+              pushTokens: arrayUnion(token)
+            });
+          } catch (e) {
+            console.error('Failed to save push token', e);
+          }
+        };
+        saveToken();
       }
-
-      // デイリーリマインダーの自動修復・設定プロセスを開始
-      scheduleDailyReminder();
     });
 
+    // 通知受信時のリスナー
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
       setNotification(notification);
     });
 
+    // 通知タップ時のリスナー
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
-      if (data?.type === 'dm' && data?.partnerId) {
-        router.push(`/dm/${data.partnerId}`);
-      } else if (data?.type === 'like' || data?.type === 'comment') {
-        router.push('/(tabs)/home');
+      if (data?.url) {
+        router.push(data.url as any);
       }
     });
 
     return () => {
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
     };
   }, [userId, shouldRegister]);
 
-  const saveTokenToFirestore = async (uid: string, token: string) => {
-    try {
-      const userRef = doc(db, "users", uid);
-      await updateDoc(userRef, { fcmTokens: arrayUnion(token) });
-    } catch (error) {
-      // ignore
-    }
-  };
-
+  // ★ 修正箇所：AsyncStorageを使った、絶対に1回しか実行されない最強のスケジュールロジック
   const scheduleDailyReminder = async () => {
-    // 複数コンポーネントからの同時呼び出しをブロック
     if (isProcessing) return;
     isProcessing = true;
 
     try {
-      // 1. 通知の権限があるか確認（権限がなければスケジュールできないので安全に終了）
-      const { status } = await Notifications.getPermissionsAsync();
-      if (status !== 'granted') {
+      // 1. スマホのローカルストレージから「設定済みフラグ」を読み込む
+      const hasScheduled = await AsyncStorage.getItem(SCHEDULE_FLAG_KEY);
+
+      // 2. 既にフラグがあれば、処理を「完全に」終了する（APIチェックはしない）
+      if (hasScheduled === 'true') {
+        console.log('Daily reminder is perfectly scheduled for 21:00. Skipping setup.');
         return;
       }
 
-      // 2. 現在OSにスケジュールされているすべての通知を取得
-      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+      // 3. 過去のバグった通知（v1やv2など）を容赦なく全て削除する
+      await Notifications.cancelAllScheduledNotificationsAsync();
 
-      // 3. すでに私たちが定義した「固定ID」のリマインダーが存在するか確認
-      const hasCorrectReminder = scheduledNotifications.some(
-        (notif) => notif.identifier === REMINDER_NOTIFICATION_ID
-      );
-
-      // 4. 過去のバグで「固定IDではないがリマインダーとして登録されてしまった」ゴミ通知を探す
-      const obsoleteReminders = scheduledNotifications.filter(
-        (notif) => notif.content.data?.type === 'reminder' && notif.identifier !== REMINDER_NOTIFICATION_ID
-      );
-
-      // 5. ゴミ通知があれば、それを個別に削除（自動お掃除機能）
-      // ※ 他の正常な通知（DMなど）は一切消えません
-      if (obsoleteReminders.length > 0) {
-        for (const notif of obsoleteReminders) {
-          await Notifications.cancelScheduledNotificationAsync(notif.identifier);
-        }
-        console.log(`Cleaned up ${obsoleteReminders.length} obsolete reminder(s).`);
-      }
-
-      // 6. 正しい固定IDのリマインダーがすでに登録されていれば、何もしない（完璧な状態）
-      if (hasCorrectReminder) {
-        return;
-      }
-
-      // 7. まだ登録されていない場合、固定IDを指定して新規登録（永久ループ）
+      // 4. 初回のみ、改めて21時の通知をスケジュールする
       await Notifications.scheduleNotificationAsync({
-        identifier: REMINDER_NOTIFICATION_ID, // ← ★ここで固定IDをOSに登録
         content: {
-          title: i18n.t('pushNotification.reminderTitle'),
-          body: i18n.t('pushNotification.reminderBody'),
-          sound: 'default',
-          data: { type: 'reminder' },
+          title: i18n.t('notification.reminderTitle', { defaultValue: '今日の記録は終わりましたか？' }),
+          body: i18n.t('notification.reminderBody', { defaultValue: 'WOMAを開いて、今日の運動や食事を記録しましょう！' }),
+          sound: true,
+          data: { url: '/(tabs)/record' },
         },
         trigger: {
           hour: 21,
@@ -126,47 +108,45 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         },
       });
 
-      console.log("Daily reminder perfectly scheduled for 21:00 with fixed ID.");
+      // 5. 【最重要】設定完了フラグをローカルストレージに保存する
+      await AsyncStorage.setItem(SCHEDULE_FLAG_KEY, 'true');
+      console.log('Successfully created a NEW daily reminder (v3) for 21:00. Flag saved.');
 
     } catch (error) {
-      console.log("Error scheduling reminder:", error);
+      console.error('Failed to schedule reminder:', error);
     } finally {
-      // 処理完了後にロック解除。次回以降は hasCorrectReminder が true になるので安全。
       isProcessing = false;
     }
   };
 
+  // リモートプッシュ通知の送信処理
   const sendPushNotification = async (targetUserId: string, title: string, body: string, data: any = {}) => {
+    if (!targetUserId) return;
     try {
-      const userDoc = await getDoc(doc(db, "users", targetUserId));
-      if (!userDoc.exists()) return;
-
-      const userData = userDoc.data();
-      const tokens = userData.fcmTokens || [];
+      const userDoc = await getDoc(doc(db, 'users', targetUserId));
+      const tokens = userDoc.data()?.pushTokens || [];
 
       if (tokens.length === 0) return;
 
-      const notifications = tokens.map((token: string) => ({
-        to: token,
-        title: title,
-        body: body,
-        data: data,
+      const message = {
+        to: tokens,
         sound: 'default',
-      }));
+        title,
+        body,
+        data,
+      };
 
-      for (const message of notifications) {
-        await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Accept-encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(message),
-        });
-      }
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(message),
+      });
     } catch (error) {
-      // ignore
+      console.error('Failed to send push notification', error);
     }
   };
 
@@ -198,16 +178,23 @@ export async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      return;
+      return undefined;
     }
-
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
     try {
-      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      // 開発環境と本番環境（EAS）の両方に対応したプロジェクトIDの取得
+      const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+      if (projectId) {
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      } else {
+        token = (await Notifications.getExpoPushTokenAsync()).data;
+      }
     } catch (e) {
-      // ignore
+      console.error('Failed to get expo push token:', e);
     }
+  } else {
+    console.log('Must use physical device for Push Notifications');
   }
+
   return token;
 }
