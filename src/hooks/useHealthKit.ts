@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Platform, AppState, AppStateStatus, Alert, Linking } from 'react-native';
+import { Platform, AppState, AppStateStatus, Alert, Linking, NativeModules } from 'react-native';
 import i18n from '../i18n';
 // iOS用
 import AppleHealthKit, { HealthValue, HealthKitPermissions } from 'react-native-health';
@@ -14,8 +14,20 @@ import {
   Permission,
 } from 'react-native-health-connect';
 
-// 🌟 修正: 'StepCount' を使用し、環境によるクラッシュを防ぐ安全なフォールバックを設定
-const STEP_PERMISSION = AppleHealthKit?.Constants?.Permissions?.StepCount || 'StepCount';
+// 🌟 修正1: 新アーキテクチャ（TurboModules）の遅延読み込み対策パッチ
+// 初回ロード時に NativeModules が空になる不具合を回避し、強制的に代入する
+if (Platform.OS === 'ios' && !AppleHealthKit.initHealthKit) {
+  const NativeHealthKit = NativeModules.AppleHealthKit;
+  if (NativeHealthKit) {
+    AppleHealthKit.initHealthKit = NativeHealthKit.initHealthKit;
+    AppleHealthKit.isAvailable = NativeHealthKit.isAvailable;
+    AppleHealthKit.getStepCount = NativeHealthKit.getStepCount;
+  }
+}
+
+// 🌟 修正2: 'StepCount' ではなく 'Steps' を使用
+// 古いバージョンのライブラリや特定のiOSバージョンでクラッシュする原因を排除
+const STEP_PERMISSION = AppleHealthKit?.Constants?.Permissions?.Steps || 'Steps';
 
 const iosPermissions: HealthKitPermissions = {
   permissions: {
@@ -50,7 +62,7 @@ export const useHealthKit = () => {
       AppleHealthKit.getStepCount(options, (err: Object, results: HealthValue) => {
         setLoading(false);
         if (err) {
-          // 🌟 修正: iOSは今日のデータがまだ0件の場合にエラーを返すことがあるため、0歩として扱う
+          // iOSは今日のデータがまだ0件の場合にエラーを返すことがあるため、0歩として扱う
           console.log('[HealthKit] iOS Steps no data or error:', err);
           setDailySteps(0);
           return;
@@ -131,20 +143,22 @@ export const useHealthKit = () => {
 
     setRequesting(true);
 
-    // 🌟 修正: iOSの場合の明示的な権限リクエスト処理
     if (Platform.OS === 'ios') {
-      AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
-        setRequesting(false);
-        if (!error) {
-          console.log('[HealthKit] iOS Permission success');
-          setIsAvailable(true);
-          fetchSteps();
-          Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
-        } else {
-          console.error('[HealthKit] iOS Init Error:', error);
-          Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
-        }
-      });
+      // 🌟 修正3: iOS 17以降のUI遷移競合バグを防ぐため、リクエスト実行に微小な遅延を挿入
+      setTimeout(() => {
+        AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
+          setRequesting(false);
+          if (!error) {
+            console.log('[HealthKit] iOS Permission success');
+            setIsAvailable(true);
+            fetchSteps();
+            Alert.alert(i18n.t('healthkit.syncSuccess'), i18n.t('healthkit.syncSuccessMessage'));
+          } else {
+            console.error('[HealthKit] iOS Init Error:', error);
+            Alert.alert(i18n.t('healthkit.permissionRequired'), i18n.t('healthkit.permissionMessage'));
+          }
+        });
+      }, 500);
       return;
     }
 
@@ -183,14 +197,29 @@ export const useHealthKit = () => {
   useEffect(() => {
     const init = async () => {
       if (Platform.OS === 'ios') {
-        AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
-          if (!error) {
-            setIsAvailable(true);
-            fetchSteps();
-          } else {
-            console.error('[HealthKit] iOS Init Error:', error);
-          }
-        });
+        // 🌟 修正4: iOS 15以降のプレウォーミング対策
+        // アプリがバックグラウンドでロードされた際にダイアログ表示が不発になるのを防ぐ
+        const initializeIOS = () => {
+          AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
+            if (!error) {
+              setIsAvailable(true);
+              fetchSteps();
+            } else {
+              console.error('[HealthKit] iOS Init Error:', error);
+            }
+          });
+        };
+
+        if (AppState.currentState === 'active') {
+          initializeIOS();
+        } else {
+          const subscription = AppState.addEventListener('change', (nextAppState) => {
+            if (nextAppState === 'active') {
+              initializeIOS();
+              subscription.remove();
+            }
+          });
+        }
       } else if (Platform.OS === 'android') {
         try {
           const canProceed = await checkAndroidInitialization();
@@ -208,9 +237,9 @@ export const useHealthKit = () => {
       }
     };
     init();
-  }, []);
+  }, [fetchSteps]); // fetchStepsを依存配列に追加して警告を防止
 
-  // アプリ復帰時の更新
+  // ▼ アプリ復帰時の更新
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && isAvailable) {

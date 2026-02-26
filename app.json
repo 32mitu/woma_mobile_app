@@ -19,6 +19,10 @@
       "buildNumber": "10",
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "今日の歩数を取得し、活動記録グラフに表示して運動不足解消をサポートするために使用します。",
