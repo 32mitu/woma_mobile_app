@@ -9,11 +9,13 @@ import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import i18n from '../i18n';
 
+// ★念のための鉄壁対応：
+// 万が一OS側で古い通知キャッシュが発火しても、アプリ上で絶対に表示しない・音も鳴らさないように強制ミュート
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
+    shouldShowBanner: false,
+    shouldShowList: false,
+    shouldPlaySound: false,
     shouldSetBadge: false,
   }),
 });
@@ -32,6 +34,8 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
+    // ★ 通知機能一時オフのため、リスナー登録などの処理をすべてコメントアウト
+    /*
     if (!shouldRegister) return;
 
     registerForPushNotificationsAsync().then(token => {
@@ -73,10 +77,20 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         Notifications.removeNotificationSubscription(responseListener.current);
       }
     };
+    */
+
+    // エラーを防ぐため、空のクリーンアップ関数を返しておく
+    return () => { };
   }, [userId, shouldRegister]);
 
   // ★ 修正箇所：AsyncStorageを使った、絶対に1回しか実行されない最強のスケジュールロジック
+  // async関数として形を残すことで、他画面での await でクラッシュするのを完全に防ぐ
   const scheduleDailyReminder = async () => {
+    // ★ 通知機能一時オフのため、ここで早期リターン（何もしない）
+    console.log('[PushNotifications] Disabled: Skipping scheduleDailyReminder');
+    return;
+
+    /*
     if (isProcessing) return;
     isProcessing = true;
 
@@ -117,10 +131,17 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     } finally {
       isProcessing = false;
     }
+    */
   };
 
   // リモートプッシュ通知の送信処理
+  // こちらも関数自体は残し、呼び出されても何もしない状態にする
   const sendPushNotification = async (targetUserId: string, title: string, body: string, data: any = {}) => {
+    // ★ 通知機能一時オフのため、ここで早期リターン
+    console.log('[PushNotifications] Disabled: Skipping sendPushNotification');
+    return;
+
+    /*
     if (!targetUserId) return;
     try {
       const userDoc = await getDoc(doc(db, 'users', targetUserId));
@@ -148,8 +169,10 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     } catch (error) {
       console.error('Failed to send push notification', error);
     }
+    */
   };
 
+  // 戻り値のオブジェクト構造を変えないことで、呼び出し元の画面を一切壊さない
   return {
     expoPushToken,
     notification,
@@ -160,6 +183,11 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
 };
 
 export async function registerForPushNotificationsAsync() {
+  // ★ 通知機能一時オフのため、パーミッション許可ダイアログを出さずに undefined を返す
+  console.log('[PushNotifications] Disabled: Skipping registerForPushNotificationsAsync');
+  return undefined;
+
+  /*
   let token;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
@@ -197,4 +225,5 @@ export async function registerForPushNotificationsAsync() {
   }
 
   return token;
+  */
 }

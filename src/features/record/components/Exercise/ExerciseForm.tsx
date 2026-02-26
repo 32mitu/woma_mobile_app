@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, Platform, Switch, Image, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Alert, Switch, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../auth/useAuth';
 import { useRecordSaver } from '../../useRecordSaver';
 import { useExerciseTypes } from '../../../../hooks/useExerciseTypes';
-import { useHealthKit } from '../../../../hooks/useHealthKit';
 
 // React Hook Form & Zod
 import { useForm, Controller } from 'react-hook-form';
@@ -44,7 +43,6 @@ export const ExerciseForm = () => {
     // --- カスタムフック ---
     const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
     const { saveRecord, saving } = useRecordSaver();
-    const { getTodaySteps, loading: healthLoading } = useHealthKit();
 
     // --- ローカルステート (フォーム管理外の動的データ) ---
     const [activities, setActivities] = useState<any[]>([]);
@@ -135,45 +133,6 @@ export const ExerciseForm = () => {
         setActivities(activities.filter(a => a.id !== id));
     };
 
-    const handleImportHealthData = async () => {
-        try {
-            const steps = await getTodaySteps();
-            if (!steps || steps === 0) {
-                Alert.alert(t('record.healthAlertTitle'), t('record.healthNoData'));
-                return;
-            }
-
-            const walkIndex = activities.findIndex(a => a.name.includes('ウォーキング') || a.name.includes('歩行'));
-
-            if (walkIndex >= 0) {
-                const updated = [...activities];
-                updated[walkIndex].steps = steps;
-                setActivities(updated);
-                Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessUpdate', { steps: steps.toLocaleString() }));
-            } else {
-                const walkType = availableTypes.find(t => t.name.includes('ウォーキング'));
-                const wLow = walkType?.metsValues?.['低'] || walkType?.low || 3.0;
-                const wMid = walkType?.metsValues?.['中'] || walkType?.mid || 3.5;
-                const wHigh = walkType?.metsValues?.['高'] || walkType?.high || 4.0;
-
-                const newActivity = {
-                    id: Date.now().toString(),
-                    name: walkType?.name || t('exercise.walking'),
-                    intensity: '中',
-                    duration: 0,
-                    steps: steps,
-                    mets: Number(wMid),
-                    baseMets: { low: Number(wLow), mid: Number(wMid), high: Number(wHigh) }
-                };
-                setActivities([...activities, newActivity]);
-                Alert.alert(t('record.healthAlertTitle'), t('record.healthSuccessNew', { steps: steps.toLocaleString() }));
-            }
-        } catch (error) {
-            console.error("HealthKit Error:", error);
-            Alert.alert(t('common.error'), t('record.healthError'));
-        }
-    };
-
     const handleCreateSubmit = async (data: { name: string, low: number, mid: number, high: number }) => {
         await createNewExerciseType(data);
         setCreateVisible(false);
@@ -202,21 +161,6 @@ export const ExerciseForm = () => {
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.pageTitle}>{t('record.todaysRecord')}</Text>
-
-                {/* ヘルスケア連携 (iOSのみ) */}
-                {Platform.OS === 'ios' && (
-                    <View style={styles.headerButtons}>
-                        <Button
-                            title={healthLoading ? t('record.importing') : t('record.importHealth')}
-                            onPress={handleImportHealthData}
-                            loading={healthLoading}
-                            icon={<Ionicons name="heart" size={16} color="white" />}
-                            style={styles.healthButton}
-                            textStyle={{ fontSize: 12 }}
-                        />
-                        <Text style={styles.attributionText}>{t('record.dataFromHealth')}</Text>
-                    </View>
-                )}
 
                 {/* --- 運動メニューセクション --- */}
                 <Card>
@@ -363,7 +307,6 @@ export const ExerciseForm = () => {
     );
 };
 
-// スタイルはコピー元のものを維持
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -390,21 +333,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#1F2937'
-    },
-    headerButtons: {
-        marginBottom: 20,
-        alignItems: 'flex-start'
-    },
-    healthButton: {
-        backgroundColor: '#FA586A',
-        borderRadius: 20,
-        borderWidth: 0,
-    },
-    attributionText: {
-        fontSize: 10,
-        color: '#9CA3AF',
-        marginTop: 4,
-        marginLeft: 4
     },
     emptyText: {
         textAlign: 'center',
