@@ -166,7 +166,7 @@ export default function ChatRoomScreen() {
           例（少し上げる）：(headerHeight - insets.bottom) + 15
           例（少し下げる）：(headerHeight - insets.bottom) - 15
         */
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 100}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 250}
         enabled={true}
       >
         <GiftedChat
