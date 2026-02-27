@@ -129,8 +129,10 @@ export default function ChatListScreen() {
         renderItem={renderItem}
         ListEmptyComponent={
           <View style={styles.center}>
-            <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 10 }} />
-            <Text style={{ color: '#888' }}>{t('dm.noMessages')}</Text>
+            <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 12 }} />
+            {/* ★ ここを修正して追加の案内テキストとスタイルを適用しました */}
+            <Text style={styles.emptyTextTitle}>{t('dm.noMessages')}</Text>
+            <Text style={styles.emptyTextSub}>相互フォローでメッセージができます</Text>
           </View>
         }
       />
@@ -168,4 +170,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+  // ★ ここに追加のスタイルを定義しました
+  emptyTextTitle: {
+    color: '#555',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptyTextSub: {
+    color: '#888',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  }
 });

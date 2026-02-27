@@ -166,7 +166,7 @@ export default function ChatRoomScreen() {
           例（少し上げる）：(headerHeight - insets.bottom) + 15
           例（少し下げる）：(headerHeight - insets.bottom) - 15
         */
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 250}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : headerHeight - insets.bottom - 150}
         enabled={true}
       >
         <GiftedChat
@@ -183,7 +183,7 @@ export default function ChatRoomScreen() {
           /* ★調整箇所2：入力欄の下の隙間
             Androidでもう少しキーボードとの間に余白が欲しい場合は、0 を 10 などに変更してください。
           */
-          bottomOffset={Platform.OS === 'ios' ? insets.bottom : 100}
+          bottomOffset={Platform.OS === 'ios' ? insets.bottom : 0}
         />
       </KeyboardAvoidingView>
     </View>
