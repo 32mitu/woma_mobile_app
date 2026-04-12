@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Timeline } from '../../src/features/timeline/components/Timeline';
 import { useAuth } from '../../src/features/auth/useAuth';
-import { usePushNotifications } from '../../src/hooks/usePushNotifications';
 import { useHealthKit } from '../../src/hooks/useHealthKit';
 import { useUnreadCount } from '../../src/features/dm/hooks/useUnreadCount';
 import { useTranslation } from 'react-i18next';
@@ -15,16 +14,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { userProfile } = useAuth();
 
-  const { scheduleDailyReminder } = usePushNotifications(userProfile?.uid);
   const { dailySteps, isAvailable, requestAccess } = useHealthKit();
   const unreadCount = useUnreadCount();
   const { t } = useTranslation();
-
-  useEffect(() => {
-    if (userProfile?.uid) {
-      scheduleDailyReminder();
-    }
-  }, [userProfile]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>

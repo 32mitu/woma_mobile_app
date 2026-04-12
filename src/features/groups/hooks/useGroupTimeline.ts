@@ -24,6 +24,12 @@ export const useGroupTimeline = (memberIds: string[]) => {
             return;
         }
 
+        if (isRefresh) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+
         try {
             const timelineRef = collection(db, "timeline");
             const constraints: any[] = [orderBy("createdAt", "desc"), limit(POSTS_PER_PAGE)];
@@ -83,8 +89,17 @@ export const useGroupTimeline = (memberIds: string[]) => {
             // console.log(`🔥 [Hook] After Filter: ${filteredPosts.length} posts`);
 
             if (filteredPosts.length === 0 && snapshot.docs.length >= POSTS_PER_PAGE) {
-                await fetchPosts(isRefresh, nextLastVisible);
+                // メンバーの投稿がなくてもページがある場合はカーソルを進めるだけで終了
+                // 再帰呼び出しにすると投稿0件のグループで無限ループになるため、hasMoreを維持してloadMoreに委ねる
+                setLastVisible(nextLastVisible);
+                setLoading(false);
+                setRefreshing(false);
                 return;
+            }
+
+            // 取得件数が1ページ未満なら次ページなし
+            if (snapshot.docs.length < POSTS_PER_PAGE) {
+                setHasMore(false);
             }
 
             if (isRefresh) {
@@ -103,7 +118,7 @@ export const useGroupTimeline = (memberIds: string[]) => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [JSON.stringify(memberIds), userProfile]);
+    }, [memberIds.join(','), userProfile?.uid]);
 
     useEffect(() => {
         fetchPosts(true);

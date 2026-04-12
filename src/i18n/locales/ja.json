@@ -177,7 +177,9 @@
         "reactionTitle": "リアクションがありました！",
         "reactionBody": "{{user}}が{{emoji}}しました",
         "commentTitle": "新しいコメント",
-        "commentBody": "{{user}}があなたの投稿にコメントしました: {{text}}"
+        "commentBody": "{{user}}があなたの投稿にコメントしました: {{text}}",
+        "newFollowerTitle": "新しいフォロワー",
+        "newFollowerBody": "{{name}}さんにフォローされました！"
     },
     "comment": {
         "placeholder": "コメントを入力...",
@@ -283,6 +285,7 @@
             "goalPlaceholderOther": "例: 5000",
             "step3": "3. 期間",
             "durationLabel": "期間（日）",
+            "durationUnit": "日間",
             "durationPlaceholder": "例: 7",
             "startButton": "チャレンジを開始",
             "errorInputRequired": "目標値と期間を入力してください",
@@ -387,7 +390,10 @@
         "sendImageConfirm": "この画像を送信しますか？",
         "sendImagesConfirm": "{{count}}枚の画像を送信しますか？",
         "sendImageFailed": "画像の送信に失敗しました",
-        "reportReason": "不適切なDM"
+        "reportReason": "不適切なDM",
+        "followToMessage": "相互フォローでメッセージができます",
+        "sendImagePartialFailed": "{{count}}枚の画像の送信に失敗しました",
+        "imageUploadFailed": "画像のアップロードに失敗しました"
     },
     "search": {
         "userTab": "ユーザー",

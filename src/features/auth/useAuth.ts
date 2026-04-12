@@ -16,9 +16,10 @@ import * as Crypto from 'expo-crypto';
 import { useAuthStore } from '../../store/authStore'; // Zustandストアをインポート
 
 // Google Sign-Inの初期設定
+// 環境変数 EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID / EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID を .env に定義することを推奨
 GoogleSignin.configure({
-  iosClientId: "540454404812-p95ail006s113tvlthe8vb542a953c4j.apps.googleusercontent.com",
-  webClientId: '540454404812-grhtketipkrgpa24m3u7hejbn94v0bec.apps.googleusercontent.com'
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '540454404812-p95ail006s113tvlthe8vb542a953c4j.apps.googleusercontent.com',
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '540454404812-grhtketipkrgpa24m3u7hejbn94v0bec.apps.googleusercontent.com',
 });
 
 // UserProfile型は store/authStore.ts で定義されているものと合わせるのが理想ですが、

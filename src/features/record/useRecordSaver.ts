@@ -32,27 +32,29 @@ export const useRecordSaver = () => {
       const userSnap = await getDoc(userDocRef);
       const userData = userSnap.exists() ? userSnap.data() : {};
 
-      const currentUsername = userData.name || auth.currentUser.displayName || 'ユーザー';
-      const currentUserIcon = userData.iconUrl || userData.photoURL || auth.currentUser.photoURL || null;
+      const currentUsername = userData.username || auth.currentUser.displayName || 'ユーザー';
+      const currentUserIcon = userData.profileImageUrl || userData.photoURL || auth.currentUser.photoURL || null;
 
       // 1. 画像処理
       let uploadedImageUrls: string[] = [];
       if (imageUris.length > 0) {
         const uploadPromises = imageUris.map(async (uri, index) => {
-          try {
-            const compressedUri = await compressImage(uri);
-            const response = await fetch(compressedUri);
-            const blob = await response.blob();
-            const filename = `records/${uid}/${Date.now()}_${index}.jpg`;
-            const storageRef = ref(storage, filename);
-            await uploadBytes(storageRef, blob);
-            return await getDownloadURL(storageRef);
-          } catch (uploadError) {
-            console.error(`画像(${index})のアップロード失敗:`, uploadError);
-            throw uploadError;
+          const compressedUri = await compressImage(uri);
+          const response = await fetch(compressedUri);
+          const blob = await response.blob();
+          const filename = `records/${uid}/${Date.now()}_${index}.jpg`;
+          const storageRef = ref(storage, filename);
+          await uploadBytes(storageRef, blob);
+          return await getDownloadURL(storageRef);
+        });
+        const results = await Promise.allSettled(uploadPromises);
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            uploadedImageUrls.push(result.value);
+          } else {
+            console.error(`画像(${index})のアップロード失敗:`, result.reason);
           }
         });
-        uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
       // 2. データ集計
@@ -103,7 +105,9 @@ export const useRecordSaver = () => {
       let newStreak = currentStreak;
       if (streakAction === 'increment') {
         newStreak += 1;
-      } else if (streakAction === 1) {
+      } else if (streakAction === 'reset' || typeof streakAction === 'number') {
+        // 'reset': 連続途切れ → 1 にリセット
+        // typeof === 'number': 初回記録（calculateStreak が 1 を返す）→ 1 にセット
         newStreak = 1;
       }
 

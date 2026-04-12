@@ -34,6 +34,11 @@ export default function SearchScreen() {
     }
   }, []);
 
+  // タブ切り替え時に前の検索結果をクリア
+  useEffect(() => {
+    setResults([]);
+  }, [activeTab]);
+
   const handleSearch = async () => {
     if (!searchText.trim()) return;
     setLoading(true);

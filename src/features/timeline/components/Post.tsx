@@ -81,6 +81,17 @@ const PostComponent = ({ post }: PostProps) => {
     return null;
   });
 
+  // post.id が変わった場合（FlatListでコンポーネントが再利用された場合）に userInfo をリセット
+  useEffect(() => {
+    if (post.username || post.userIcon) {
+      setUserInfo({ displayName: post.username || t('timeline.noName'), photoURL: post.userIcon || '' });
+    } else if (post.user) {
+      setUserInfo({ displayName: post.user.displayName || t('timeline.noName'), photoURL: post.user.photoURL || '' });
+    } else {
+      setUserInfo(null);
+    }
+  }, [post.id]);
+
   const currentUser = auth.currentUser;
   const targetUid = post.userId || post.uid;
   const isOwner = currentUser && targetUid === currentUser.uid;
@@ -152,6 +163,7 @@ const PostComponent = ({ post }: PostProps) => {
     } catch (error) {
       console.error('[Like] Firestore update FAILED:', error);
       setLocalReactions(previousReactions);
+      Alert.alert(t('common.error'), t('timeline.reactionFailed', { defaultValue: 'リアクションの送信に失敗しました' }));
     }
   };
 
@@ -363,7 +375,7 @@ const PostComponent = ({ post }: PostProps) => {
 
       {showComments && (
         <View style={styles.commentSectionWrapper}>
-          <CommentSection postId={post.id} />
+          <CommentSection postId={post.id} postAuthorId={targetUid} />
         </View>
       )}
     </Card>

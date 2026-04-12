@@ -25,8 +25,8 @@ export default function RootLayout() {
   // 認証状態の監視（初期化のため呼び出し）
   const { user } = useAuth();
 
-  // プッシュ通知設定用のフック
-  const { registerForPushNotificationsAsync, scheduleDailyReminder } = usePushNotifications();
+  // プッシュ通知設定用のフック（uid を渡してトークン登録も有効化）
+  const { registerForPushNotificationsAsync, scheduleDailyReminder } = usePushNotifications(user?.uid, true);
 
   // Zustand ストアから状態を取得
   const { language, _hasHydrated } = useUiStore();
@@ -49,13 +49,9 @@ export default function RootLayout() {
   }, [_hasHydrated, language]);
 
   useEffect(() => {
-
-    const setup = async () => {
-      await registerForPushNotificationsAsync();
-      await scheduleDailyReminder();
-    };
-    setup();
-
+    // registerForPushNotificationsAsync は usePushNotifications 内の useEffect で
+    // shouldRegister=true のとき自動実行されるため、ここでは呼ばない（二重登録防止）
+    scheduleDailyReminder();
   }, []);
 
   // データの準備が完全に終わるまでは画面を描画しない

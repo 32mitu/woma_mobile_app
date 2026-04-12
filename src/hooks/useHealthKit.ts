@@ -195,32 +195,35 @@ export const useHealthKit = () => {
 
   // ▼ 初回ロード時チェック
   useEffect(() => {
-    const init = async () => {
-      if (Platform.OS === 'ios') {
-        // 🌟 修正4: iOS 15以降のプレウォーミング対策
-        // アプリがバックグラウンドでロードされた際にダイアログ表示が不発になるのを防ぐ
-        const initializeIOS = () => {
-          AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
-            if (!error) {
-              setIsAvailable(true);
-              fetchSteps();
-            } else {
-              console.error('[HealthKit] iOS Init Error:', error);
-            }
-          });
-        };
+    let initSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
 
-        if (AppState.currentState === 'active') {
-          initializeIOS();
+    const initializeIOS = () => {
+      AppleHealthKit.initHealthKit(iosPermissions, (error: string) => {
+        if (!error) {
+          setIsAvailable(true);
+          fetchSteps();
         } else {
-          const subscription = AppState.addEventListener('change', (nextAppState) => {
-            if (nextAppState === 'active') {
-              initializeIOS();
-              subscription.remove();
-            }
-          });
+          console.error('[HealthKit] iOS Init Error:', error);
         }
-      } else if (Platform.OS === 'android') {
+      });
+    };
+
+    if (Platform.OS === 'ios') {
+      // 🌟 修正4: iOS 15以降のプレウォーミング対策
+      // アプリがバックグラウンドでロードされた際にダイアログ表示が不発になるのを防ぐ
+      if (AppState.currentState === 'active') {
+        initializeIOS();
+      } else {
+        initSubscription = AppState.addEventListener('change', (nextAppState) => {
+          if (nextAppState === 'active') {
+            initializeIOS();
+            initSubscription?.remove();
+            initSubscription = null;
+          }
+        });
+      }
+    } else if (Platform.OS === 'android') {
+      const initAndroid = async () => {
         try {
           const canProceed = await checkAndroidInitialization();
           if (canProceed) {
@@ -234,9 +237,13 @@ export const useHealthKit = () => {
         } catch (e) {
           console.log("[HealthKit] Auto-check Error(Android):", e);
         }
-      }
+      };
+      initAndroid();
+    }
+
+    return () => {
+      initSubscription?.remove();
     };
-    init();
   }, [fetchSteps]); // fetchStepsを依存配列に追加して警告を防止
 
   // ▼ アプリ復帰時の更新

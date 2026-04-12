@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   doc, collection, query, where, onSnapshot,
   serverTimestamp, getDocs, writeBatch
@@ -11,6 +11,7 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
+  const ownerIdRef = useRef<string | undefined>();
 
   useEffect(() => {
     if (!groupId) return;
@@ -21,12 +22,13 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
     const unsubGroup = onSnapshot(groupRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        ownerIdRef.current = data.createdBy || data.ownerId;
         setGroup(prev => ({
           ...prev,
           id: snap.id,
           name: data.name,
           description: data.description,
-          ownerId: data.createdBy || data.ownerId,
+          ownerId: ownerIdRef.current,
           photoURL: data.photoURL,
           challenge: data.challenge,
           createdAt: data.createdAt,
@@ -53,19 +55,16 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
 
       setGroup(prev => {
         if (!prev) return null;
-
-        // オーナー判定
-        const currentOwnerId = prev.ownerId;
-        if (userId && currentOwnerId) {
-          setIsOwner(currentOwnerId === userId);
-        }
-
         return {
           ...prev,
           memberIds: memberIds,
           memberCount: snapshot.size
         };
       });
+
+      if (userId) {
+        setIsOwner(ownerIdRef.current === userId);
+      }
 
       setLoading(false);
     });
@@ -79,12 +78,13 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
   // 参加・脱退
   const toggleJoin = async () => {
     if (!group || !userId) return;
+    if (loading) return; // 連打防止
 
     try {
       const batch = writeBatch(db);
 
       if (isMember) {
-        // 脱退
+        // 脱退: userId でクエリして削除
         const q = query(
           collection(db, 'groupMembers'),
           where('groupId', '==', groupId),
@@ -95,8 +95,8 @@ export const useGroupDetail = (groupId: string, userId?: string) => {
           batch.delete(doc.ref);
         });
       } else {
-        // 参加
-        const memberRef = doc(collection(db, 'groupMembers'));
+        // 参加: doc ID を groupId_userId で固定 → べき等（連打しても1件のみ作成される）
+        const memberRef = doc(db, 'groupMembers', `${groupId}_${userId}`);
         batch.set(memberRef, {
           groupId: groupId,
           userId: userId,

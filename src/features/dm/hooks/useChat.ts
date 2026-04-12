@@ -33,21 +33,27 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
       limit(50)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const date = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedMessages = snapshot.docs.map(doc => {
+          const data = doc.data();
+          const date = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
 
-        return {
-          _id: doc.id,
-          text: data.text || '',
-          createdAt: date,
-          user: data.user,
-          image: data.image || null,
-        } as IMessage;
-      });
-      setMessages(fetchedMessages);
-    });
+          return {
+            _id: doc.id,
+            text: data.text || '',
+            createdAt: date,
+            user: data.user,
+            image: data.image || null,
+          } as IMessage;
+        });
+        setMessages(fetchedMessages);
+      },
+      (error) => {
+        console.error('[useChat] メッセージ取得エラー:', error);
+      }
+    );
 
     return () => unsubscribe();
   }, [roomId]);
@@ -66,11 +72,16 @@ export const useChat = (currentUserId?: string, partnerUserId?: string) => {
         const filename = `chat-images/${roomId}/${Date.now()}.jpg`;
         const storageRef = ref(storage, filename);
 
-        const response = await fetch(compressedUri);
-        const blob = await response.blob();
-
-        await uploadBytes(storageRef, blob);
-        downloadUrl = await getDownloadURL(storageRef);
+        try {
+          const response = await fetch(compressedUri);
+          if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
+          const blob = await response.blob();
+          await uploadBytes(storageRef, blob);
+          downloadUrl = await getDownloadURL(storageRef);
+        } catch (uploadError) {
+          console.error('画像アップロードエラー:', uploadError);
+          throw new Error(i18n.t('dm.imageUploadFailed', { defaultValue: '画像のアップロードに失敗しました' }));
+        }
       }
 
       if (!text && !downloadUrl) return;

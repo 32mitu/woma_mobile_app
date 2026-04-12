@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.tsx?$\")",
+      "Bash(ls -la /c/dev/woma-mobile/woma_ios/docs/*/)",
+      "Bash(wc -l /c/dev/woma-mobile/woma_ios/src/ui/*.tsx /c/dev/woma-mobile/woma_ios/src/features/**/components/*.tsx)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"meal_records\\\\|meal_templates\\\\|publicProducts\" /c/dev/woma-mobile/woma_ios/src --include=*.tsx --include=*.ts)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -n \"useChat\\\\|useUnreadCount\" /c/dev/woma-mobile/woma_ios/app/dm/*.tsx)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

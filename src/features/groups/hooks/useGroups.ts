@@ -30,7 +30,7 @@ export const useGroups = () => {
 
       // 2. ドキュメント参照（ID）を先に作成
       const groupRef = doc(collection(db, 'groups'));
-      const memberRef = doc(collection(db, 'groupMembers'));
+      const memberRef = doc(db, 'groupMembers', `${groupRef.id}_${userId}`);
 
       // 3. バッチにセット (書き込み予約)
       batch.set(groupRef, {

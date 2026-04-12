@@ -44,6 +44,7 @@ export default function PublicProfileScreen() {
       }
     } catch (e) {
       console.error(e);
+      Alert.alert(t('common.error'), t('social.loadProfileFailed', { defaultValue: 'プロフィールの読み込みに失敗しました' }));
     } finally {
       setLoadingProfile(false);
     }

@@ -30,10 +30,17 @@ export const CommentSection = ({ postId, postAuthorId, onCommentAdded }: Comment
       collection(db, "timeline", postId, "comments"),
       orderBy("createdAt", "asc")
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      },
+      (error) => {
+        console.error('[CommentSection] コメント取得エラー:', error);
+        setLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, [postId]);
 

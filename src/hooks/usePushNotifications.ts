@@ -4,27 +4,22 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // ★ 追加
 import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import i18n from '../i18n';
 
-// ★念のための鉄壁対応：
-// 万が一OS側で古い通知キャッシュが発火しても、アプリ上で絶対に表示しない・音も鳴らさないように強制ミュート
+// 通知の表示設定（アプリがフォアグラウンドの場合も表示する）
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowBanner: false,
-    shouldShowList: false,
-    shouldPlaySound: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
 
-// 重複実行を防ぐメモリ上のロック変数
+// セッション内での並行呼び出しを防ぐメモリロック
 let isProcessing = false;
-
-// ★ 新しい管理キー（AsyncStorageに保存するフラグの名前）
-const SCHEDULE_FLAG_KEY = 'woma_daily_reminder_scheduled_v3';
 
 export const usePushNotifications = (userId?: string, shouldRegister: boolean = false) => {
   const router = useRouter();
@@ -34,19 +29,16 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
-    // ★ 通知機能一時オフのため、リスナー登録などの処理をすべてコメントアウト
-    /*
     if (!shouldRegister) return;
 
     registerForPushNotificationsAsync().then(token => {
       setExpoPushToken(token);
       if (token && userId) {
-        // トークンをFirestoreに保存
         const saveToken = async () => {
           try {
             const userRef = doc(db, 'users', userId);
             await updateDoc(userRef, {
-              pushTokens: arrayUnion(token)
+              fcmTokens: arrayUnion(token)
             });
           } catch (e) {
             console.error('Failed to save push token', e);
@@ -61,7 +53,7 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
       setNotification(notification);
     });
 
-    // 通知タップ時のリスナー
+    // 通知タップ時のリスナー（画面遷移）
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.url) {
@@ -70,44 +62,21 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
     });
 
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-      }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
     };
-    */
-
-    // エラーを防ぐため、空のクリーンアップ関数を返しておく
-    return () => { };
   }, [userId, shouldRegister]);
 
-  // ★ 修正箇所：AsyncStorageを使った、絶対に1回しか実行されない最強のスケジュールロジック
-  // async関数として形を残すことで、他画面での await でクラッシュするのを完全に防ぐ
+  // 毎日21時のリマインダーをスケジュール
+  // 「必ず cancelAll → schedule 1件」で重複を完全に防ぐ
   const scheduleDailyReminder = async () => {
-    // ★ 通知機能一時オフのため、ここで早期リターン（何もしない）
-    console.log('[PushNotifications] Disabled: Skipping scheduleDailyReminder');
-    return;
-
-    /*
     if (isProcessing) return;
     isProcessing = true;
 
     try {
-      // 1. スマホのローカルストレージから「設定済みフラグ」を読み込む
-      const hasScheduled = await AsyncStorage.getItem(SCHEDULE_FLAG_KEY);
-
-      // 2. 既にフラグがあれば、処理を「完全に」終了する（APIチェックはしない）
-      if (hasScheduled === 'true') {
-        console.log('Daily reminder is perfectly scheduled for 21:00. Skipping setup.');
-        return;
-      }
-
-      // 3. 過去のバグった通知（v1やv2など）を容赦なく全て削除する
+      // 既存のスケジュール済み通知を全て削除してから1件だけ登録する
+      // → 何度呼ばれても常に通知は1件だけになる
       await Notifications.cancelAllScheduledNotificationsAsync();
-
-      // 4. 初回のみ、改めて21時の通知をスケジュールする
       await Notifications.scheduleNotificationAsync({
         content: {
           title: i18n.t('notification.reminderTitle', { defaultValue: '今日の記録は終わりましたか？' }),
@@ -116,38 +85,31 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
           data: { url: '/(tabs)/record' },
         },
         trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour: 21,
           minute: 0,
-          repeats: true, // 毎日繰り返す
         },
       });
-
-      // 5. 【最重要】設定完了フラグをローカルストレージに保存する
-      await AsyncStorage.setItem(SCHEDULE_FLAG_KEY, 'true');
-      console.log('Successfully created a NEW daily reminder (v3) for 21:00. Flag saved.');
-
+      console.log('[PushNotifications] Daily reminder scheduled for 21:00');
     } catch (error) {
-      console.error('Failed to schedule reminder:', error);
+      console.error('[PushNotifications] Failed to schedule reminder:', error);
     } finally {
       isProcessing = false;
     }
-    */
   };
 
-  // リモートプッシュ通知の送信処理
-  // こちらも関数自体は残し、呼び出されても何もしない状態にする
   const sendPushNotification = async (targetUserId: string, title: string, body: string, data: any = {}) => {
-    // ★ 通知機能一時オフのため、ここで早期リターン
-    console.log('[PushNotifications] Disabled: Skipping sendPushNotification');
-    return;
-
-    /*
     if (!targetUserId) return;
     try {
       const userDoc = await getDoc(doc(db, 'users', targetUserId));
-      const tokens = userDoc.data()?.pushTokens || [];
+      const userData = userDoc.data();
 
-      if (tokens.length === 0) return;
+      // 通知OFF設定なら送らない（Cloud Functionと同じロジック）
+      if (userData?.settings?.notificationEnabled === false) return;
+
+      const tokens: string[] = userData?.fcmTokens || [];
+
+      if (!Array.isArray(tokens) || tokens.length === 0) return;
 
       const message = {
         to: tokens,
@@ -167,12 +129,10 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
         body: JSON.stringify(message),
       });
     } catch (error) {
-      console.error('Failed to send push notification', error);
+      console.error('[PushNotifications] Failed to send push notification', error);
     }
-    */
   };
 
-  // 戻り値のオブジェクト構造を変えないことで、呼び出し元の画面を一切壊さない
   return {
     expoPushToken,
     notification,
@@ -183,12 +143,8 @@ export const usePushNotifications = (userId?: string, shouldRegister: boolean = 
 };
 
 export async function registerForPushNotificationsAsync() {
-  // ★ 通知機能一時オフのため、パーミッション許可ダイアログを出さずに undefined を返す
-  console.log('[PushNotifications] Disabled: Skipping registerForPushNotificationsAsync');
-  return undefined;
-
-  /*
   let token;
+
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -210,7 +166,6 @@ export async function registerForPushNotificationsAsync() {
     }
 
     try {
-      // 開発環境と本番環境（EAS）の両方に対応したプロジェクトIDの取得
       const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
       if (projectId) {
         token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
@@ -218,12 +173,11 @@ export async function registerForPushNotificationsAsync() {
         token = (await Notifications.getExpoPushTokenAsync()).data;
       }
     } catch (e) {
-      console.error('Failed to get expo push token:', e);
+      console.error('[PushNotifications] Failed to get expo push token:', e);
     }
   } else {
-    console.log('Must use physical device for Push Notifications');
+    console.log('[PushNotifications] Must use physical device for Push Notifications');
   }
 
   return token;
-  */
 }

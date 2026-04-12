@@ -55,6 +55,10 @@ const sendPushNotification = async (
 export const onNewMessage = functions.firestore
   .document("chatRooms/{roomId}/messages/{messageId}")
   .onCreate(async (snap, context) => {
+    // 冪等性: 再試行時の二重通知を防ぐ
+    if (snap.data()?.notified === true) return;
+    await snap.ref.update({ notified: true });
+
     const message = snap.data();
     const roomId = context.params.roomId;
     const senderId = message.senderId;
@@ -77,26 +81,26 @@ export const onNewMessage = functions.firestore
     );
   });
 
-// 2. 「えらい！」（いいね）受信通知
-export const onNewLike = functions.firestore
-  .document("timeline/{postId}/likes/{likeId}")
+// 2. フォロー通知
+// ※ リアクション通知はクライアント側（Post.tsx）で送信済みのため Cloud Function は不要
+export const onNewFollow = functions.firestore
+  .document("follows/{docId}")
   .onCreate(async (snap, context) => {
-    const likeData = snap.data();
-    const postId = context.params.postId;
+    // 冪等性: 再試行時の二重通知を防ぐ
+    if (snap.data()?.notified === true) return;
+    await snap.ref.update({ notified: true });
 
-    const postDoc = await db.collection("timeline").doc(postId).get();
-    if (!postDoc.exists) return;
+    const { followerId, followingId } = snap.data();
+    if (!followerId || !followingId || followerId === followingId) return;
 
-    const postData = postDoc.data();
-    const recipientId = postData?.userId;
-
-    if (recipientId === likeData.fromUserId) return;
+    const followerDoc = await db.collection("users").doc(followerId).get();
+    const followerName = followerDoc.data()?.username || "誰か";
 
     await sendPushNotification(
-      recipientId,
-      "えらい！",
-      `${likeData.fromUserName}さんがあなたの記録を承認しました`,
-      { type: "like", postId: postId }
+      followingId,
+      "新しいフォロワー",
+      `${followerName}さんにフォローされました！`,
+      { type: "follow", userId: followerId }
     );
   });
 
@@ -104,6 +108,10 @@ export const onNewLike = functions.firestore
 export const onNewComment = functions.firestore
   .document("timeline/{postId}/comments/{commentId}")
   .onCreate(async (snap, context) => {
+    // 冪等性: 再試行時の二重通知を防ぐ
+    if (snap.data()?.notified === true) return;
+    await snap.ref.update({ notified: true });
+
     const commentData = snap.data();
     const postId = context.params.postId;
 
@@ -115,10 +123,12 @@ export const onNewComment = functions.firestore
 
     if (recipientId === commentData.userId) return;
 
+    const commenterName = commentData.username || "誰か";
+    const previewText = (commentData.text || "").substring(0, 50);
     await sendPushNotification(
       recipientId,
       "コメント",
-      `${commentData.username}さんがコメントしました: ${commentData.text}`,
+      `${commenterName}さんがコメントしました: ${previewText}`,
       { type: "comment", postId: postId }
     );
   });

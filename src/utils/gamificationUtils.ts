@@ -23,12 +23,11 @@ export const calculateStreak = (lastLogDate: string | undefined | null, today: s
         return undefined;
     }
 
-    // today文字列からDateオブジェクトを生成して昨日を計算
-    // 注意: new Date(string) はUTCとして解釈される場合があるが、YYYY-MM-DD形式かつ
-    // getLocalDateStringがローカル時間を返す前提であれば、単純な日付操作として一貫性は保たれる。
-    // ただし念のため、T00:00:00をつけて確実にローカルタイムとして扱うか、
-    // あるいはDate操作せずに文字列操作だけでやる方が安全だが、ここではDate経由で修正する。
-    const todayDate = new Date(today);
+    // 'YYYY-MM-DD' 文字列を new Date() に渡すと UTC 午前0時として解釈されるため
+    // UTC-5 以西のタイムゾーンでは getDate() が前日を返すバグが起きる。
+    // 年/月/日を個別に渡すコンストラクタを使いローカルタイムで生成する。
+    const [y, m, d] = today.split('-').map(Number);
+    const todayDate = new Date(y, m - 1, d);
     const yesterdayDate = new Date(todayDate);
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = getLocalDateString(yesterdayDate);
@@ -40,7 +39,7 @@ export const calculateStreak = (lastLogDate: string | undefined | null, today: s
         return 'increment';
     } else {
         console.log('[GameUtils] 連続記録途切れ -> streak reset to 1');
-        return 1;
+        return 'reset';
     }
 };
 

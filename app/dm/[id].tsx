@@ -31,23 +31,26 @@ export default function ChatRoomScreen() {
   const [partnerName, setPartnerName] = useState(t('dm.chat'));
 
   useEffect(() => {
-    if (partnerId) {
-      const fetchPartner = async () => {
-        try {
-          const docRef = doc(db, 'users', partnerId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data();
-            setPartnerName(data.username || data.displayName || t('dm.chat'));
-          }
-        } catch (e) {
-          console.error(e);
+    if (!partnerId) return;
+    const fetchPartner = async () => {
+      try {
+        const docRef = doc(db, 'users', partnerId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          setPartnerName(data.username || data.displayName || t('dm.chat'));
         }
-      };
-      fetchPartner();
-      markAsRead();
-    }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchPartner();
   }, [partnerId]);
+
+  // roomId が確定してから既読にする（partnerId と同じ useEffect に置くと roomId がまだ null）
+  useEffect(() => {
+    markAsRead();
+  }, [markAsRead]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -123,12 +126,11 @@ export default function ChatRoomScreen() {
           {
             text: t('common.ok'),
             onPress: async () => {
-              try {
-                const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
-                await Promise.all(sendPromises);
-              } catch (e) {
-                console.error(e);
-                Alert.alert(t('common.error'), t('dm.sendImageFailed'));
+              const sendPromises = result.assets.map(asset => sendImage(asset.uri, user));
+              const results = await Promise.allSettled(sendPromises);
+              const failCount = results.filter(r => r.status === 'rejected').length;
+              if (failCount > 0) {
+                Alert.alert(t('common.error'), t('dm.sendImagePartialFailed', { count: failCount, defaultValue: `${failCount}枚の画像送信に失敗しました` }));
               }
             }
           }

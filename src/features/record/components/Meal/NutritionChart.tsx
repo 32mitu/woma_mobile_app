@@ -21,10 +21,10 @@ export const NutritionChart: React.FC<NutritionChartProps> = ({ data }) => {
     const cCal = carbs * 4;
     const totalCal = pCal + fCal + cCal || 1; // 0除算防止
 
-    // パーセンテージ計算
+    // パーセンテージ計算（合計が必ず100%になるよう最後の値を補完）
     const pPercent = Math.round((pCal / totalCal) * 100);
     const fPercent = Math.round((fCal / totalCal) * 100);
-    const cPercent = Math.round((cCal / totalCal) * 100);
+    const cPercent = 100 - pPercent - fPercent;
 
     // グラフ用データ
     const pieData = [

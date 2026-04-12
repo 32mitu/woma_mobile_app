@@ -67,11 +67,16 @@ export const ProfileEditForm = () => {
   };
 
   const uploadImage = async (uri: string, uid: string) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const storageRef = ref(storage, `profileImages/${uid}/${Date.now()}`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
+    try {
+      const response = await fetch(uri);
+      if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
+      const blob = await response.blob();
+      const storageRef = ref(storage, `profileImages/${uid}/${Date.now()}`);
+      await uploadBytes(storageRef, blob);
+      return await getDownloadURL(storageRef);
+    } catch (uploadError) {
+      throw new Error(t('profile.imageUploadFailed', { defaultValue: '画像のアップロードに失敗しました' }));
+    }
   };
 
   const onSubmit = async (data: any) => {

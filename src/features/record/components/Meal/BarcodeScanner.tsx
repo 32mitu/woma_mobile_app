@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, ActivityIndicator, Dimensions, Alert, Image, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import { useTranslation } from 'react-i18next';
 import { IconButton } from '../../../../ui/IconButton';
 import { Button } from '../../../../ui/Button';
 import { Card } from '../../../../ui/Card';
@@ -35,10 +36,11 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 280;
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose, onScanned }) => {
+    const { t } = useTranslation();
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [loadingMessage, setLoadingMessage] = useState('検索中...');
+    const [loadingMessage, setLoadingMessage] = useState('');
 
     // 誤検知防止用のState
     const [isScanReady, setIsScanReady] = useState(false);
@@ -69,7 +71,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
         setScannedData(null);
         setEditedName('');
         setEditedCalories('');
-        setLoadingMessage('検索中...');
+        setLoadingMessage('');
     };
 
     // スキャン範囲の判定ロジック
@@ -139,7 +141,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
         setScanned(true);
         setLoading(true);
-        setLoadingMessage('商品情報を検索中...');
+        setLoadingMessage(t('barcode.searchingProduct'));
 
         const janCode = result.data;
         console.log(`Scanned: ${janCode}`);
@@ -183,7 +185,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
                     }
 
                     calories = typeof calories === 'number' ? Math.round(calories) : 0;
-                    const name = product.product_name_ja || product.product_name || '名称不明な商品';
+                    const name = product.product_name_ja || product.product_name || t('barcode.unknownProduct');
 
                     showConfirmModal({
                         barcode: janCode,
@@ -204,7 +206,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
             // --- Tier 2: 楽天API ---
             try {
-                setLoadingMessage('楽天市場を検索中...');
+                setLoadingMessage(t('barcode.searchingRakuten'));
                 const rakutenItem = await searchRakutenProduct(janCode);
                 if (rakutenItem) {
                     showConfirmModal({
@@ -223,12 +225,12 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
             // --- ヒットなし (手動入力) ---
             Alert.alert(
-                "商品が見つかりませんでした",
-                "手動で登録しますか？",
+                t('barcode.productNotFound'),
+                t('barcode.productNotFoundMessage'),
                 [
-                    { text: "再スキャン", onPress: () => { setScanned(false); setLoading(false); } },
+                    { text: t('barcode.rescan'), onPress: () => { setScanned(false); setLoading(false); } },
                     {
-                        text: "手入力する",
+                        text: t('barcode.enterManually'),
                         onPress: () => {
                             showConfirmModal({
                                 barcode: janCode,
@@ -244,7 +246,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
         } catch (error) {
             console.error(error);
-            Alert.alert("エラー", "データの取得に失敗しました");
+            Alert.alert(t('common.error'), t('barcode.fetchError'));
             setScanned(false);
             setLoading(false);
         }
@@ -295,9 +297,9 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
         return (
             <Modal visible={visible} animationType="slide">
                 <View style={styles.permissionContainer}>
-                    <Text>カメラの使用許可が必要です</Text>
-                    <Button title="許可する" onPress={requestPermission} />
-                    <Button title="閉じる" variant="secondary" onPress={onClose} />
+                    <Text>{t('barcode.permissionRequired')}</Text>
+                    <Button title={t('barcode.allow')} onPress={requestPermission} />
+                    <Button title={t('barcode.close')} variant="secondary" onPress={onClose} />
                 </View>
             </Modal>
         );
@@ -323,13 +325,13 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
                             <View style={styles.iconBackground}>
                                 <IconButton name="close" iconColor="white" onPress={onClose} />
                             </View>
-                            <Text style={styles.headerTitle}>バーコードをスキャン</Text>
+                            <Text style={styles.headerTitle}>{t('barcode.scanTitle')}</Text>
                         </View>
 
                         <View style={styles.scanAreaContainer}>
                             <View style={[styles.scanArea, !isScanReady && { borderColor: '#999' }]} />
                             <Text style={styles.instruction}>
-                                {loading ? loadingMessage : (isScanReady ? "バーコードを枠内に合わせてください" : "カメラ準備中...")}
+                                {loading ? (loadingMessage || t('barcode.searching')) : (isScanReady ? t('barcode.alignBarcode') : t('barcode.preparing'))}
                             </Text>
                             {loading && <ActivityIndicator size="large" color="#4ECDC4" style={{ marginTop: 20 }} />}
                         </View>
@@ -349,7 +351,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
                         >
                             <Card style={styles.confirmCard}>
                                 <View style={styles.modalHeader}>
-                                    <Text style={styles.modalTitle}>読み取り結果</Text>
+                                    <Text style={styles.modalTitle}>{t('barcode.resultTitle')}</Text>
                                     <IconButton name="close" size={20} onPress={handleCloseModal} />
                                 </View>
 
@@ -360,23 +362,23 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
                                 )}
 
                                 <View style={styles.formGroup}>
-                                    <Text style={styles.label}>商品名</Text>
+                                    <Text style={styles.label}>{t('barcode.productName')}</Text>
                                     <Input
                                         value={editedName}
                                         onChangeText={setEditedName}
-                                        placeholder="商品名を入力"
+                                        placeholder={t('barcode.productNamePlaceholder')}
                                     />
                                 </View>
 
                                 <View style={styles.formGroup}>
                                     <View style={styles.rowLabel}>
-                                        <Text style={styles.label}>カロリー (kcal)</Text>
+                                        <Text style={styles.label}>{t('barcode.calories')}</Text>
 
                                         {scannedData?.unitType === 'serving' && (
-                                            <Badge label="1包装あたり" color="success" size="sm" />
+                                            <Badge label={t('barcode.perServing')} color="success" size="sm" />
                                         )}
                                         {scannedData?.unitType === '100g' && (
-                                            <Badge label="100gあたり" color="warning" size="sm" />
+                                            <Badge label={t('barcode.per100g')} color="warning" size="sm" />
                                         )}
                                     </View>
                                     <Input
@@ -390,12 +392,12 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ visible, onClose
 
                                 {scannedData?.source === 'rakuten' && !scannedData.calories && (
                                     <Text style={styles.rakutenAlert}>
-                                        ※商品名のみ取得しました。パッケージ裏面のカロリーを入力してください。
+                                        {t('barcode.calorieNote')}
                                     </Text>
                                 )}
 
                                 <Button
-                                    title="リストに追加"
+                                    title={t('barcode.addToList')}
                                     onPress={handleConfirm}
                                     style={{ marginTop: 10 }}
                                 />

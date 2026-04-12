@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { doc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 // 共通コンポーネント
 import { Button } from '../../../src/ui/Button';
@@ -16,6 +17,7 @@ type ChallengeType = 'steps' | 'calories' | 'distance';
 export default function CreateChallengeScreen() {
     const router = useRouter();
     const { groupId } = useLocalSearchParams();
+    const { t } = useTranslation();
 
     const [type, setType] = useState<ChallengeType>('steps');
     const [target, setTarget] = useState('');
@@ -24,19 +26,29 @@ export default function CreateChallengeScreen() {
 
     const handleCreate = async () => {
         if (!target || !durationDays) {
-            Alert.alert('エラー', '目標値と期間を入力してください');
+            Alert.alert(t('common.error'), t('group.challenge.errorInputRequired'));
             return;
         }
 
         if (!groupId || typeof groupId !== 'string') {
-            Alert.alert('エラー', 'グループ情報が取得できません');
+            Alert.alert(t('common.error'), t('group.challenge.errorGroupRequired'));
+            return;
+        }
+
+        const targetNum = parseInt(target, 10);
+        const days = parseInt(durationDays, 10);
+
+        if (isNaN(targetNum) || targetNum <= 0) {
+            Alert.alert(t('common.error'), t('validation.invalidNumber'));
+            return;
+        }
+        if (isNaN(days) || days <= 0 || days > 365) {
+            Alert.alert(t('common.error'), t('group.challenge.errorInputRequired'));
             return;
         }
 
         setLoading(true);
         try {
-            const targetNum = parseInt(target, 10);
-            const days = parseInt(durationDays, 10);
 
             const startDate = new Date();
             // 時間を00:00:00に合わせる
@@ -61,13 +73,13 @@ export default function CreateChallengeScreen() {
                 updatedAt: serverTimestamp(),
             });
 
-            Alert.alert('成功', 'チャレンジを作成しました！', [
-                { text: 'OK', onPress: () => router.back() }
+            Alert.alert(t('common.success'), t('group.challenge.successMessage'), [
+                { text: t('common.ok'), onPress: () => router.back() }
             ]);
 
         } catch (error) {
             console.error(error);
-            Alert.alert('エラー', 'チャレンジの作成に失敗しました');
+            Alert.alert(t('common.error'), t('group.challenge.errorFailed'));
         } finally {
             setLoading(false);
         }
@@ -94,42 +106,40 @@ export default function CreateChallengeScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <IconButton name="close" onPress={() => router.back()} />
-                <Text style={styles.headerTitle}>チャレンジ作成</Text>
+                <Text style={styles.headerTitle}>{t('group.challenge.createTitle')}</Text>
                 <View style={{ width: 40 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.sectionTitle}>1. 種目を選ぶ</Text>
+                <Text style={styles.sectionTitle}>{t('group.challenge.step1')}</Text>
                 <View style={styles.typeContainer}>
-                    <TypeSelector value="steps" label="歩数" icon="👟" />
-                    <TypeSelector value="calories" label="カロリー" icon="🔥" />
-                    <TypeSelector value="distance" label="距離" icon="📍" />
+                    <TypeSelector value="steps" label={t('group.challenge.steps')} icon="👟" />
+                    <TypeSelector value="calories" label={t('group.challenge.calories')} icon="🔥" />
+                    <TypeSelector value="distance" label={t('group.challenge.distance')} icon="📍" />
                 </View>
 
-                <Text style={styles.sectionTitle}>2. チーム目標を設定</Text>
+                <Text style={styles.sectionTitle}>{t('group.challenge.step2')}</Text>
                 <Card padding="medium">
                     <Input
-                        label={`目標の合計${type === 'steps' ? '歩数' : type === 'calories' ? 'カロリー' : '距離'}`}
+                        label={t('group.challenge.goalLabel', { unit: type === 'steps' ? t('group.challenge.steps') : type === 'calories' ? 'kcal' : 'km' })}
                         value={target}
                         onChangeText={setTarget}
                         keyboardType="numeric"
-                        placeholder={type === 'steps' ? "例: 100000" : "例: 5000"}
-                        rightElement={<Text style={styles.unit}>{type === 'steps' ? '歩' : type === 'calories' ? 'kcal' : 'km'}</Text>}
+                        placeholder={type === 'steps' ? t('group.challenge.goalPlaceholderSteps') : t('group.challenge.goalPlaceholderOther')}
+                        rightElement={<Text style={styles.unit}>{type === 'steps' ? t('group.challenge.steps') : type === 'calories' ? 'kcal' : 'km'}</Text>}
                     />
-                    <Text style={styles.hint}>
-                        メンバー全員で達成する合計値を設定してください。
-                    </Text>
+                    <Text style={styles.hint}>{t('group.challenge.goalHint')}</Text>
                 </Card>
 
-                <Text style={styles.sectionTitle}>3. 期間</Text>
+                <Text style={styles.sectionTitle}>{t('group.challenge.step3')}</Text>
                 <Card padding="medium">
                     <Input
-                        label="チャレンジ期間 (日数)"
+                        label={t('group.challenge.durationLabel')}
                         value={durationDays}
                         onChangeText={setDurationDays}
                         keyboardType="numeric"
-                        placeholder="例: 7"
-                        rightElement={<Text style={styles.unit}>日間</Text>}
+                        placeholder={t('group.challenge.durationPlaceholder')}
+                        rightElement={<Text style={styles.unit}>{t('group.challenge.durationUnit')}</Text>}
                     />
                 </Card>
 
@@ -137,7 +147,7 @@ export default function CreateChallengeScreen() {
 
             <View style={styles.footer}>
                 <Button
-                    title="チャレンジを開始する"
+                    title={t('group.challenge.startButton')}
                     onPress={handleCreate}
                     loading={loading}
                     disabled={loading}

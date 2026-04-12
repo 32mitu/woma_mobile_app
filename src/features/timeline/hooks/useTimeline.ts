@@ -30,6 +30,11 @@ export const useTimeline = (groupId?: string) => {
   const fetchPosts = useCallback(async (isRefresh: boolean = false, startAfterDoc: QueryDocumentSnapshot<DocumentData> | null = null) => {
     try {
       if (!userUid) return;
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
       let q;
       const constraints: any[] = [orderBy("createdAt", "desc"), limit(POSTS_PER_PAGE)];
@@ -110,7 +115,6 @@ export const useTimeline = (groupId?: string) => {
   }, [fetchPosts, userUid]);
 
   const refresh = async () => {
-    setRefreshing(true);
     setHasMore(true);
     setLastVisible(null);
     await fetchPosts(true, null);

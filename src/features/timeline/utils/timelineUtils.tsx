@@ -33,7 +33,7 @@ export const RenderTextWithHashtags = ({ text, style }: { text: string, style?: 
   return (
     <Text style={style}>
       {parts.map((part, index) => {
-        if (hashtagRegex.test(part)) {
+        if (part.startsWith('#')) {
           // ハッシュタグの場合は青色にしてタップ可能にする
           return (
             <Text

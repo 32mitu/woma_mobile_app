@@ -6,8 +6,6 @@ import {
 import { db } from '../../../../firebaseConfig';
 import { useAuth } from '../../auth/useAuth';
 import { useTranslation } from 'react-i18next';
-// ★追加: プッシュ通知用のフックをインポート
-import { usePushNotifications } from '../../../hooks/usePushNotifications';
 
 const COLLECTION_NAME = 'follows';
 
@@ -17,11 +15,10 @@ export const useSocial = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
-  // ★追加: 通知送信用の関数を取得
-  const { sendPushNotification } = usePushNotifications();
-
   const followUser = async (targetUserId: string) => {
     if (!userProfile?.uid || !targetUserId) return;
+    if (userProfile.uid === targetUserId) return; // 自分自身はフォロー不可
+    if (loading) return; // 連打防止
     setLoading(true);
     try {
       const docId = `${userProfile.uid}_${targetUserId}`;
@@ -31,15 +28,7 @@ export const useSocial = () => {
         followingId: targetUserId,
         createdAt: serverTimestamp(),
       });
-
-      // ★追加: フォロー成功時に、相手に即時プッシュ通知を送信する
-      const userName = userProfile.username || userProfile.displayName || t('timeline.noName', { defaultValue: '名無し' });
-      await sendPushNotification(
-        targetUserId,
-        t('notification.newFollowerTitle', { defaultValue: '新しいフォロワー' }),
-        t('notification.newFollowerBody', { name: userName, defaultValue: `${userName}さんにフォローされました！` }),
-        { url: `/public/${userProfile.uid}` } // 通知タップ時に自分のプロフィール画面へ飛ぶように設定
-      );
+      // 通知は Cloud Function (onNewFollow) が送信するためクライアント側では送らない
 
     } catch (error) {
       console.error('Follow error:', error);
@@ -51,6 +40,7 @@ export const useSocial = () => {
 
   const unfollowUser = async (targetUserId: string) => {
     if (!userProfile?.uid || !targetUserId) return;
+    if (loading) return; // 連打防止
     setLoading(true);
     try {
       const docId = `${userProfile.uid}_${targetUserId}`;
@@ -75,6 +65,11 @@ export const useFollowStatus = (targetUserId: string) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // targetUserId が変わったとき古い状態を即座にリセット
+    setIsFollowing(false);
+    setIsFollowedBy(false);
+    setLoading(true);
+
     if (!userProfile?.uid || !targetUserId) {
       setLoading(false);
       return;
@@ -159,20 +154,33 @@ export const useSocialList = (userId: string | undefined, type: 'following' | 'f
           }
         });
 
-        if (targetIds.length === 0) {
+        // userId -> follow doc ref のマップを作成（インデックスずれを防ぐ）
+        const followDocMap = new Map<string, any>();
+        snapshot.forEach(followDoc => {
+          const data = followDoc.data() as { followingId: string; followerId: string };
+          const targetId = type === 'following' ? data.followingId : data.followerId;
+          if (targetId) {
+            followDocMap.set(targetId, followDoc.ref);
+          }
+        });
+
+        const resolvedTargetIds = Array.from(followDocMap.keys());
+
+        if (resolvedTargetIds.length === 0) {
           setUsers([]);
         } else {
-          const userPromises = targetIds.map(async (id, index) => {
+          const userPromises = resolvedTargetIds.map(async (id) => {
             try {
               const userDoc = await getDoc(doc(db, 'users', id));
               if (userDoc.exists()) {
                 return { uid: userDoc.id, ...userDoc.data() };
               } else {
-                // ユーザーが存在しない場合、フォローデータを削除して整理する
-                // snapshot.docs[index] が対応する follow ドキュメント
-                const followDocRef = snapshot.docs[index].ref;
-                console.log(`Deleting orphan follow record: ${followDocRef.id} (Target user ${id} not found)`);
-                await deleteDoc(followDocRef);
+                // ユーザーが存在しない場合、対応する follow ドキュメントをマップから取得して削除
+                const followDocRef = followDocMap.get(id);
+                if (followDocRef) {
+                  console.log(`Deleting orphan follow record (Target user ${id} not found)`);
+                  await deleteDoc(followDocRef);
+                }
                 return null;
               }
             } catch (e) {

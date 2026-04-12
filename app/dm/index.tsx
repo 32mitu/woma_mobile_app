@@ -21,6 +21,8 @@ export default function ChatListScreen() {
 
   // ユーザー情報のメモリキャッシュ
   const userCache = useRef<{ [key: string]: { name: string, avatar: string | null } }>({});
+  // 連続スナップショット発火時の競合防止用バージョンカウンター
+  const snapshotVersion = useRef(0);
 
   useEffect(() => {
     if (!userProfile?.uid) return;
@@ -31,50 +33,58 @@ export default function ChatListScreen() {
       orderBy('updatedAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const promises = snapshot.docs.map(async (roomDoc) => {
-        const data = roomDoc.data();
-        const partnerId = data.members.find((id: string) => id !== userProfile.uid);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // このスナップショットのバージョンを記録（後から古い結果が上書きするのを防ぐ）
+      const version = ++snapshotVersion.current;
 
-        let partnerName = 'Unknown';
-        let partnerAvatar = null;
+      (async () => {
+        const promises = snapshot.docs.map(async (roomDoc) => {
+          const data = roomDoc.data();
+          const partnerId = data.members.find((id: string) => id !== userProfile.uid);
 
-        if (partnerId) {
-          if (userCache.current[partnerId]) {
-            const cached = userCache.current[partnerId];
-            partnerName = cached.name;
-            partnerAvatar = cached.avatar;
-          } else {
-            // キャッシュになければ取得
-            try {
-              const userSnap = await getDoc(doc(db, 'users', partnerId));
-              if (userSnap.exists()) {
-                const userData = userSnap.data();
-                partnerName = userData.username || userData.displayName || t('dm.noName');
-                partnerAvatar = userData.profileImageUrl || userData.photoURL || null;
-                // キャッシュ保存
-                userCache.current[partnerId] = { name: partnerName, avatar: partnerAvatar };
+          let partnerName = 'Unknown';
+          let partnerAvatar = null;
+
+          if (partnerId) {
+            if (userCache.current[partnerId]) {
+              const cached = userCache.current[partnerId];
+              partnerName = cached.name;
+              partnerAvatar = cached.avatar;
+            } else {
+              // キャッシュになければ取得
+              try {
+                const userSnap = await getDoc(doc(db, 'users', partnerId));
+                if (userSnap.exists()) {
+                  const userData = userSnap.data();
+                  partnerName = userData.username || userData.displayName || t('dm.noName');
+                  partnerAvatar = userData.profileImageUrl || userData.photoURL || null;
+                  // キャッシュ保存
+                  userCache.current[partnerId] = { name: partnerName, avatar: partnerAvatar };
+                }
+              } catch (e) {
+                console.error(e);
               }
-            } catch (e) {
-              console.error(e);
             }
           }
+
+          return {
+            id: roomDoc.id,
+            partnerId,
+            partnerName,
+            partnerAvatar,
+            lastMessage: data.lastMessage || '',
+            updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date(),
+            unreadCount: data.unreadCounts?.[userProfile.uid] || 0,
+          };
+        });
+
+        const results = await Promise.all(promises);
+        // 最新のスナップショット分のみ反映（古い Promise.all が後から完了しても無視）
+        if (version === snapshotVersion.current) {
+          setChatRooms(results);
+          setLoading(false);
         }
-
-        return {
-          id: roomDoc.id,
-          partnerId,
-          partnerName,
-          partnerAvatar,
-          lastMessage: data.lastMessage || '',
-          updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date(),
-          unreadCount: data.unreadCounts?.[userProfile.uid] || 0,
-        };
-      });
-
-      const results = await Promise.all(promises);
-      setChatRooms(results);
-      setLoading(false);
+      })();
     });
 
     return () => unsubscribe();
@@ -132,7 +142,7 @@ export default function ChatListScreen() {
             <Ionicons name="chatbubbles-outline" size={48} color="#ccc" style={{ marginBottom: 12 }} />
             {/* ★ ここを修正して追加の案内テキストとスタイルを適用しました */}
             <Text style={styles.emptyTextTitle}>{t('dm.noMessages')}</Text>
-            <Text style={styles.emptyTextSub}>相互フォローでメッセージができます</Text>
+            <Text style={styles.emptyTextSub}>{t('dm.followToMessage')}</Text>
           </View>
         }
       />

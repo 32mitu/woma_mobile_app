@@ -23,7 +23,7 @@ export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
             case 'steps': return { unit: t('group.challenge.steps'), icon: '👟', label: t('group.challenge.progressLabel', { label: t('group.challenge.steps') }) };
             case 'calories': return { unit: 'kcal', icon: '🔥', label: t('group.challenge.progressLabel', { label: t('group.challenge.calories') }) };
             case 'distance': return { unit: 'km', icon: '📍', label: t('group.challenge.progressLabel', { label: t('group.challenge.distance') }) };
-            default: return { unit: '', icon: '🎯', label: t('group.challenge.progressLabel', { label: t('group.challenge.progressLabel', { label: '' }) }) };
+            default: return { unit: '', icon: '🎯', label: t('group.challenge.progressLabel', { label: '' }) };
         }
     };
     const { unit, icon, label } = getMeta();
@@ -72,8 +72,8 @@ export const ChallengeProgress = ({ challenge, currentValue }: Props) => {
             {/* 期間表示 */}
             <Text style={styles.dateInfo}>
                 {t('group.challenge.period', {
-                    start: challenge.startDate.toDate().toLocaleDateString(),
-                    end: challenge.endDate.toDate().toLocaleDateString()
+                    start: challenge.startDate?.toDate?.()?.toLocaleDateString() ?? '',
+                    end: challenge.endDate?.toDate?.()?.toLocaleDateString() ?? ''
                 })}
             </Text>
         </Card>

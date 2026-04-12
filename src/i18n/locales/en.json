@@ -176,7 +176,9 @@
         "reactionTitle": "New Reaction!",
         "reactionBody": "{{user}} reacted {{emoji}} to your post",
         "commentTitle": "New Comment",
-        "commentBody": "{{user}} commented on your post: {{text}}"
+        "commentBody": "{{user}} commented on your post: {{text}}",
+        "newFollowerTitle": "New Follower",
+        "newFollowerBody": "{{name}} started following you!"
     },
     "comment": {
         "placeholder": "Write a comment...",
@@ -282,6 +284,7 @@
             "goalPlaceholderOther": "e.g. 5000",
             "step3": "3. Duration",
             "durationLabel": "Duration (days)",
+            "durationUnit": "days",
             "durationPlaceholder": "e.g. 7",
             "startButton": "Start Challenge",
             "errorInputRequired": "Please enter goal value and duration",
@@ -393,7 +396,10 @@
         "sendImagesConfirm": "Send {{count}} images?",
         "sendImageFailed": "Failed to send image",
         "reportReason": "Inappropriate DM",
-        "daysAgo": "{{count}}d ago"
+        "daysAgo": "{{count}}d ago",
+        "followToMessage": "Mutual follow required to message",
+        "sendImagePartialFailed": "Failed to send {{count}} image(s)",
+        "imageUploadFailed": "Failed to upload image"
     },
     "search": {
         "userTab": "Users",

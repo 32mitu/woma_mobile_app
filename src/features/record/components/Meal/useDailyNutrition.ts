@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 // 修正: 階層が深いため ../ を5つに増やす
 import { db } from '../../../../../firebaseConfig';
 // 修正: featuresフォルダまで戻るため ../ を3つに増やす
@@ -26,10 +26,10 @@ export const useDailyNutrition = () => {
             startOfDay.setHours(0, 0, 0, 0);
 
             // Firestoreから今日の記録を取得
+            // 複合インデックス不要のため userId のみでクエリし、クライアント側で日付フィルタ
             const q = query(
                 collection(db, 'meal_records'),
-                where('userId', '==', user.uid),
-                where('createdAt', '>=', startOfDay)
+                where('userId', '==', user.uid)
             );
 
             const snapshot = await getDocs(q);
@@ -41,6 +41,13 @@ export const useDailyNutrition = () => {
 
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
+
+                // クライアント側で今日のレコードのみフィルタ
+                const createdAt = data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate()
+                    : data.createdAt?.toDate?.();
+                if (!createdAt || createdAt < startOfDay) return;
+
                 // 合計カロリー加算
                 totalCal += data.totalCalories || 0;
 

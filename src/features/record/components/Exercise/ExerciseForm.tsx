@@ -87,17 +87,10 @@ export const ExerciseForm = () => {
     };
 
     const handleSelectExercise = (type: any) => {
-        // METs値の取得ロジック (既存維持)
-        let lowVal, midVal, highVal;
-        if (type.metsValues) {
-            lowVal = type.metsValues['低'];
-            midVal = type.metsValues['中'];
-            highVal = type.metsValues['高'];
-        } else {
-            lowVal = type.low;
-            midVal = type.mid;
-            highVal = type.high;
-        }
+        // デフォルト種目・カスタム種目ともに metsValues: { '低', '中', '高' } 形式で統一されている
+        const lowVal = type.metsValues?.['低'];
+        const midVal = type.metsValues?.['中'];
+        const highVal = type.metsValues?.['高'];
 
         const low = parseFloat(lowVal) || 3.0;
         const mid = parseFloat(midVal) || 3.5;
@@ -106,7 +99,7 @@ export const ExerciseForm = () => {
         setActivities([
             ...activities,
             {
-                id: Date.now().toString(),
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                 name: type.name || t('exercise.walking'),
                 intensity: '中',
                 duration: 30,

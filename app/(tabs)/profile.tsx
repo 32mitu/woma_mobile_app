@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl, Alert, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -29,6 +29,14 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [isDeleting, setIsDeleting] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // アンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
+  }, []);
 
   // 引っ張って更新
   const onRefresh = useCallback(async () => {
@@ -38,8 +46,9 @@ export default function ProfileScreen() {
     // PFCデータも再取得 (一時停止)
     // await refetchNutrition();
 
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []); // 依存配列から refetchNutrition を削除
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
   // ログアウト処理
   const handleLogout = async () => {
