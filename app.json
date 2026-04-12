@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.kouheimitsumura.app",
-      "buildNumber": "12",
+      "buildNumber": "23",
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
       "entitlements": {
