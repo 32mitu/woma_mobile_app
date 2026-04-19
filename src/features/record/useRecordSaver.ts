@@ -2,14 +2,23 @@ import { useState } from 'react';
 import { collection, doc, serverTimestamp, writeBatch, increment, getDoc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../../../firebaseConfig';
-import { useRouter } from 'expo-router';
 import { Alert } from 'react-native';
 import { compressImage } from '../../utils/imageCompressor';
 import { calculateStreak, getLocalDateString, checkNewBadges } from '../../utils/gamificationUtils';
+import { Badge } from '../../data/badges';
+
+export interface SavedRecordResult {
+  totalCalories: number;
+  totalSteps: number;
+  activities: any[];
+  imageUrls: string[];
+  streak: number;
+  displayBadges: string[];
+  newlyEarnedBadges: Badge[];
+}
 
 export const useRecordSaver = () => {
   const [saving, setSaving] = useState(false);
-  const router = useRouter();
 
   const saveRecord = async (
     data: {
@@ -19,8 +28,8 @@ export const useRecordSaver = () => {
       imageUris: string[];
       postToTimeline: boolean;
     }
-  ) => {
-    if (!auth.currentUser) return;
+  ): Promise<SavedRecordResult | null> => {
+    if (!auth.currentUser) return null;
     setSaving(true);
 
     try {
@@ -106,8 +115,6 @@ export const useRecordSaver = () => {
       if (streakAction === 'increment') {
         newStreak += 1;
       } else if (streakAction === 'reset' || typeof streakAction === 'number') {
-        // 'reset': 連続途切れ → 1 にリセット
-        // typeof === 'number': 初回記録（calculateStreak が 1 を返す）→ 1 にセット
         newStreak = 1;
       }
 
@@ -186,19 +193,20 @@ export const useRecordSaver = () => {
 
       await batch.commit();
 
-      if (earnedBadges.length > 0) {
-        Alert.alert(
-          "🎉 バッジ獲得！",
-          `おめでとうございます！\n以下のバッジを獲得しました：\n\n${earnedBadges.map(b => `・${b.name}`).join('\n')}`,
-          [{ text: "OK", onPress: () => router.navigate('/(tabs)/home') }]
-        );
-      } else {
-        router.navigate('/(tabs)/home');
-      }
+      return {
+        totalCalories,
+        totalSteps,
+        activities: sanitizedActivities,
+        imageUrls: uploadedImageUrls,
+        streak: newStreak,
+        displayBadges: earnedBadges.map(b => b.id),
+        newlyEarnedBadges: earnedBadges,
+      };
 
     } catch (error) {
       console.error("保存エラー:", error);
       Alert.alert("エラー", "記録の保存に失敗しました。");
+      return null;
     } finally {
       setSaving(false);
     }

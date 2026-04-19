@@ -470,5 +470,19 @@
         "minutesAgo": "{{count}}分前",
         "hoursAgo": "{{count}}時間前",
         "daysAgo": "{{count}}日前"
+    },
+    "share": {
+        "modalTitle": "記録をシェアしよう",
+        "instagramButton": "Instagramストーリーズでシェア",
+        "genericButton": "その他のアプリでシェア",
+        "skipButton": "スキップ",
+        "hintText": "「シェア」をタップしてInstagramストーリーズを選んでください",
+        "capturing": "画像を作成中...",
+        "captureError": "画像の作成に失敗しました",
+        "shareError": "シェアに失敗しました",
+        "cardCaloriesLabel": "消費カロリー",
+        "cardStreakLabel": "日継続",
+        "cardBranding": "Recorded on WOMA",
+        "cardMoreActivities": "+{{count}}件"
     }
 }

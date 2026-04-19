@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/home_icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -29,6 +29,7 @@
         "NSHealthUpdateUsageDescription": "アプリ内で記録した運動データをヘルスケアに保存し、活動履歴を一元管理するために使用します。",
         "NSCameraUsageDescription": "プロフィール写真の撮影や、チャットでの写真送信のためにカメラを使用します。",
         "NSPhotoLibraryUsageDescription": "プロフィール画像の設定や、チャットでの写真送信のためにライブラリへアクセスします。",
+        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram"],
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -68,14 +69,14 @@
         {
           "ios": {
             "useFrameworks": "static",
-            "newArchEnabled": true
+            "newArchEnabled": false
           },
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "minSdkVersion": 26,
             "buildToolsVersion": "35.0.0",
-            "newArchEnabled": true
+            "newArchEnabled": false
           }
         }
       ],

@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, Switch, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
-// Hooks & Logic (パス修正済み)
+// Hooks & Logic
 import { useAuth } from '../../../auth/useAuth';
-import { useRecordSaver } from '../../useRecordSaver';
+import { useRecordSaver, SavedRecordResult } from '../../useRecordSaver';
 import { useExerciseTypes } from '../../../../hooks/useExerciseTypes';
+import { useWorkoutShare } from '../../../share/useWorkoutShare';
 
 // React Hook Form & Zod
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { recordSchema, RecordFormData } from '../../../../utils/validationSchemas';
 
-// Components (パス修正済み: 親階層へアクセス)
+// Components
 import { ActivityInput } from '../ActivityInput';
 import { ExerciseSelector } from '../ExerciseSelector';
 import { CreateExerciseTypeForm } from '../CreateExerciseTypeForm';
@@ -25,12 +26,18 @@ import { Input } from '../../../../ui/Input';
 import { ListItem } from '../../../../ui/ListItem';
 import { IconButton } from '../../../../ui/IconButton';
 
+// Share
+import { WorkoutShareCard } from '../../../share/WorkoutShareCard';
+import { WorkoutShareModal } from '../../../share/WorkoutShareModal';
+import { ShareCardData } from '../../../share/shareCardUtils';
+
 export const ExerciseForm = () => {
     const router = useRouter();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { userProfile } = useAuth();
+    const lang = i18n.language === 'en' ? 'en' : 'ja';
 
-    // --- フォーム設定 (React Hook Form) ---
+    // --- フォーム設定 ---
     const { control, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<RecordFormData>({
         resolver: zodResolver(recordSchema),
         defaultValues: {
@@ -43,12 +50,15 @@ export const ExerciseForm = () => {
     // --- カスタムフック ---
     const { availableTypes, createNewExerciseType, deleteExerciseType } = useExerciseTypes(userProfile);
     const { saveRecord, saving } = useRecordSaver();
+    const { cardRef, isCapturing, shareToInstagram, shareGeneric } = useWorkoutShare();
 
-    // --- ローカルステート (フォーム管理外の動的データ) ---
+    // --- ローカルステート ---
     const [activities, setActivities] = useState<any[]>([]);
     const [imageUris, setImageUris] = useState<string[]>([]);
     const [selectorVisible, setSelectorVisible] = useState(false);
     const [createVisible, setCreateVisible] = useState(false);
+    const [shareModalVisible, setShareModalVisible] = useState(false);
+    const [shareData, setShareData] = useState<SavedRecordResult | null>(null);
 
     // プロフィールの体重を初期値としてセット
     useEffect(() => {
@@ -57,11 +67,25 @@ export const ExerciseForm = () => {
         }
     }, [userProfile, setValue]);
 
-    // ActivityInput等で計算に使うための現在の入力体重
     const currentWeightInput = watch('weight');
     const effectiveWeight = currentWeightInput || (userProfile?.weight ? String(userProfile.weight) : '');
 
-    // --- 画像選択ロジック ---
+    // SavedRecordResult → ShareCardData 変換
+    const toShareCardData = useCallback((result: SavedRecordResult): ShareCardData => ({
+        activities: result.activities.map(act => ({
+            name: act.name,
+            duration: act.duration,
+            calories: act.calories,
+        })),
+        totalCalories: result.totalCalories,
+        totalSteps: result.totalSteps,
+        comment: '',
+        imageUrls: result.imageUrls,
+        streak: result.streak,
+        displayBadges: result.displayBadges,
+    }), []);
+
+    // --- 画像選択 ---
     const pickImage = async () => {
         const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!granted) {
@@ -72,7 +96,7 @@ export const ExerciseForm = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.7,
-            selectionLimit: 4 - imageUris.length, // 残りの枚数分だけ選択可能
+            selectionLimit: 4 - imageUris.length,
         });
 
         if (!result.canceled) {
@@ -81,13 +105,12 @@ export const ExerciseForm = () => {
         }
     };
 
-    // --- アクティビティ操作ロジック ---
+    // --- アクティビティ操作 ---
     const handleAddActivity = () => {
         setSelectorVisible(true);
     };
 
     const handleSelectExercise = (type: any) => {
-        // デフォルト種目・カスタム種目ともに metsValues: { '低', '中', '高' } 形式で統一されている
         const lowVal = type.metsValues?.['低'];
         const midVal = type.metsValues?.['中'];
         const highVal = type.metsValues?.['高'];
@@ -131,15 +154,31 @@ export const ExerciseForm = () => {
         setCreateVisible(false);
     };
 
+    // シェアモーダルを閉じてホームへ遷移
+    const handleShareDismiss = useCallback(() => {
+        setShareModalVisible(false);
+        const badges = shareData?.newlyEarnedBadges || [];
+        setShareData(null);
+
+        if (badges.length > 0) {
+            Alert.alert(
+                '🎉 バッジ獲得！',
+                `おめでとうございます！\n以下のバッジを獲得しました：\n\n${badges.map(b => `・${b.name}`).join('\n')}`,
+                [{ text: 'OK', onPress: () => router.navigate('/(tabs)/home') }]
+            );
+        } else {
+            router.navigate('/(tabs)/home');
+        }
+    }, [shareData, router]);
+
     // --- 送信処理 ---
     const onSubmit = async (data: RecordFormData) => {
-        // アクティビティも画像もコメントも体重もない場合はエラー
         if (activities.length === 0 && !data.comment && imageUris.length === 0 && !data.weight) {
             Alert.alert(t('common.error'), t('record.validationError'));
             return;
         }
 
-        await saveRecord({
+        const result = await saveRecord({
             activities,
             weight: data.weight || '',
             comment: data.comment || '',
@@ -147,8 +186,13 @@ export const ExerciseForm = () => {
             postToTimeline: data.postToTimeline
         });
 
-        router.back();
+        if (result) {
+            setShareData(result);
+            setShareModalVisible(true);
+        }
     };
+
+    const cardData = shareData ? toShareCardData(shareData) : null;
 
     return (
         <View style={styles.container}>
@@ -250,7 +294,7 @@ export const ExerciseForm = () => {
                         </View>
                     </View>
 
-                    {/* タイムライン投稿設定 (ListItem使用) */}
+                    {/* タイムライン投稿設定 */}
                     <Controller
                         control={control}
                         name="postToTimeline"
@@ -282,6 +326,13 @@ export const ExerciseForm = () => {
                 />
             </ScrollView>
 
+            {/* --- オフスクリーン キャプチャ用カード (Modal の外に置くこと) --- */}
+            {cardData && (
+                <View style={styles.offscreenContainer} pointerEvents="none">
+                    <WorkoutShareCard ref={cardRef} data={cardData} lang={lang} />
+                </View>
+            )}
+
             {/* --- モーダルコンポーネント --- */}
             <ExerciseSelector
                 visible={selectorVisible}
@@ -295,6 +346,15 @@ export const ExerciseForm = () => {
                 visible={createVisible}
                 onSubmit={handleCreateSubmit}
                 onCancel={() => setCreateVisible(false)}
+            />
+            <WorkoutShareModal
+                visible={shareModalVisible}
+                data={cardData}
+                isCapturing={isCapturing}
+                lang={lang}
+                onShareInstagram={shareToInstagram}
+                onShareGeneric={shareGeneric}
+                onDismiss={handleShareDismiss}
             />
         </View>
     );
@@ -391,5 +451,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#F9FAFB',
+    },
+    offscreenContainer: {
+        position: 'absolute',
+        left: -9999,
+        top: 0,
     },
 });

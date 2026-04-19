@@ -470,5 +470,19 @@
     "errorBoundary": {
         "title": "Unexpected Error",
         "reload": "Reload App"
+    },
+    "share": {
+        "modalTitle": "Share Your Workout",
+        "instagramButton": "Share to Instagram Stories",
+        "genericButton": "Share to Other Apps",
+        "skipButton": "Skip",
+        "hintText": "Tap Share and select Instagram Stories",
+        "capturing": "Creating image...",
+        "captureError": "Failed to create image",
+        "shareError": "Failed to share",
+        "cardCaloriesLabel": "Calories Burned",
+        "cardStreakLabel": "Day Streak",
+        "cardBranding": "Recorded on WOMA",
+        "cardMoreActivities": "+{{count}} more"
     }
 }
