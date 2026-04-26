@@ -3,11 +3,11 @@
     "name": "woma-mobile",
     "slug": "woma-mobile",
     "scheme": "woma-mobile",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/home_icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.kouheimitsumura.app",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
       "entitlements": {
@@ -69,14 +69,14 @@
         {
           "ios": {
             "useFrameworks": "static",
-            "newArchEnabled": false
+            "newArchEnabled": true
           },
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "minSdkVersion": 26,
             "buildToolsVersion": "35.0.0",
-            "newArchEnabled": false
+            "newArchEnabled": true
           }
         }
       ],

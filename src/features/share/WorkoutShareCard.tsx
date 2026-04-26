@@ -165,6 +165,7 @@ export const WorkoutShareCard = React.forwardRef<View, WorkoutShareCardProps>(
           {/* フッター */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>✦  Recorded on WOMA  ✦</Text>
+            <Text style={styles.footerUrl}>woma-web-app.com</Text>
           </View>
         </LinearGradient>
       </View>
@@ -408,5 +409,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     opacity: 0.55,
     letterSpacing: 1,
+  },
+  footerUrl: {
+    color: C.navy,
+    fontSize: 11,
+    opacity: 0.35,
+    marginTop: 4,
+    letterSpacing: 0.3,
   },
 });
